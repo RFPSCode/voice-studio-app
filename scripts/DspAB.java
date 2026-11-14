@@ -15,7 +15,12 @@ public class DspAB{public static void main(String[] a)throws Exception{
  for(File f:fs){String role=f.getName().replaceAll("^\\d+_|\\.wav$","");List<Double> l=f0.get(role);Collections.sort(l);double base=l.get(l.size()/2);
    JSONObject post=roles.get(role).getJSONObject("post");float[] c=clean.get(f.getName());
    long t0=System.nanoTime();float[] o=Store.applyPostV1(c,post,base);long t1=System.nanoTime();float[] n=Store.applyPost(c,post,base);long t2=System.nanoTime();
-   String b=f.getName().replace(".wav","");Store.writeWav(new File(a[2]+"/"+b+"_0clean.wav"),c);Store.writeWav(new File(a[2]+"/"+b+"_1old.wav"),o);Store.writeWav(new File(a[2]+"/"+b+"_2new.wav"),n);
+   String b=f.getName().replace(".wav","");boolean NA=System.getProperty("vsnoalign")!=null;
+   if(NA){double rP=Store.pitchRatio(c,post,base);double fmm=post.optDouble("formant",1);String q=a[2]+"/"+b;
+     Store.writeWav(new File(q+"_3pitchNA.wav"),Voice.finish(Voice.change(c,24000,rP,1,1,0),24000,-17,0.89f));
+     Store.writeWav(new File(q+"_4formNA.wav"),Voice.finish(Voice.change(c,24000,1,fmm,1,0),24000,-17,0.89f));
+     Store.writeWav(new File(q+"_2newNA.wav"),n);continue;}
+   Store.writeWav(new File(a[2]+"/"+b+"_0clean.wav"),c);Store.writeWav(new File(a[2]+"/"+b+"_1old.wav"),o);Store.writeWav(new File(a[2]+"/"+b+"_2new.wav"),n);
    double ratioP=Store.pitchRatio(c,post,base);double fm=post.optDouble("formant",1);
    Store.writeWav(new File(a[2]+"/"+b+"_3pitch.wav"),Voice.finish(Voice.change(c,24000,ratioP,1,1,0),24000,-17,0.89f));
    Store.writeWav(new File(a[2]+"/"+b+"_4form.wav"),Voice.finish(Voice.change(c,24000,1,fm,1,0),24000,-17,0.89f));
@@ -23,7 +28,8 @@ public class DspAB{public static void main(String[] a)throws Exception{
    Store.writeWav(new File(o2+"_8revO.wav"),Voice.finish(Dsp.reverb(c,SR,0.35),SR,-17,0.89f));
    Store.writeWav(new File(o2+"_8revN.wav"),Voice.finish(Voice.reverb(c,SR,0.35),SR,-17,0.89f));
    Store.writeWav(new File(o2+"_9echO.wav"),Voice.finish(Dsp.echo(c,SR,180,0.35,0.3),SR,-17,0.89f));
-   Store.writeWav(new File(o2+"_9echN.wav"),Voice.finish(Voice.echo(c,SR,180,0.35,0.3),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_9echN.wav"),Voice.finish(Voice.echoPlain(c,SR,180,0.35,0.3),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_9echD.wav"),Voice.finish(Voice.echo(c,SR,180,0.35,0.3),SR,-17,0.89f));
    Store.writeWav(new File(o2+"_AlayO.wav"),Voice.finish(Dsp.layer(c,SR,0.5,0.8,0.3),SR,-17,0.89f));
    {float[] lo=Dsp.fit(Voice.change(c,SR,0.5,0.8,1,0),c.length);float[] z=new float[c.length];for(int i=0;i<z.length;i++)z[i]=c[i]+0.3f*lo[i];
     Store.writeWav(new File(o2+"_AlayN.wav"),Voice.finish(z,SR,-17,0.89f));}

@@ -222,6 +222,27 @@ public final class Voice {
             }
             i = Math.max(e, last + 1);
         }
+        // consistency: move every pulse mark (±12 % of a period) to where its cycle best matches the previous
+        // cycle (normalised cross-correlation), so all grains are cut at the same point of the waveform
+        if (System.getProperty("vsnoalign") == null) for (int k = 1; k < m.n; k++) {
+            if (!m.voiced[k] || !m.voiced[k - 1]) continue;
+            int pk = m.pos[k - 1], ck = m.pos[k];
+            int P = ck - pk;
+            if (P < 8 || P > 3 * m.period[k]) continue;
+            int h = P / 2, r = Math.max(1, (int) (0.12 * P));
+            if (pk - h < 0 || ck + r + h >= x.length) continue;
+            double ea = 0;
+            for (int j = -h; j < h; j++) ea += x[pk + j] * x[pk + j];
+            double best = -2, bl = 0;
+            int bs = 0;
+            for (int sft = -r; sft <= r; sft++) {
+                double cc = 0, eb = 0;
+                for (int j = -h; j < h; j++) { double b = x[ck + sft + j]; cc += x[pk + j] * b; eb += b * b; }
+                double ncc = cc / Math.sqrt(ea * eb + 1e-12) - 0.002 * Math.abs(sft);   // slight preference for the peak
+                if (ncc > best) { best = ncc; bs = sft; }
+            }
+            if (best > 0.5 && ck + bs > pk + 0.5 * m.period[k]) m.pos[k] = ck + bs;
+        }
         // periods from the neighbouring marks (voiced) for the analysis windows
         for (int k = 0; k < m.n; k++) {
             if (!m.voiced[k]) continue;
@@ -452,8 +473,44 @@ public final class Voice {
     }
 
     // ================================================================ echo
-    /** Feedback echo whose repeats get darker and thinner (low-pass 3.2 kHz + high-pass 180 Hz in the loop). */
+    /**
+     * Feedback echo whose repeats get darker and thinner (low-pass 3.2 kHz + high-pass 180 Hz in the loop), and
+     * ducked: while the voice is speaking the repeats are kept down (to 35 %), they come up in the gaps and at
+     * the end — the broadcast trick that keeps an echo from blurring the words.
+     */
     public static float[] echo(float[] x, int sr, double delayMs, double feedback, double mix) {
+        if (mix <= 0 || delayMs <= 0) return x;
+        double D = delayMs * sr / 1000.0;
+        feedback = Math.max(0, Math.min(0.85, feedback));
+        int repeats = feedback > 0 ? (int) Math.ceil(Math.log(0.01) / Math.log(feedback)) : 1;
+        int tail = (int) Math.min(sr * 2.5, D * Math.max(1, repeats) + sr * 0.05);
+        int n = x.length + tail;
+        float[] y = new float[n];
+        double[] buf = new double[n];
+        double lpA = Math.exp(-2 * Math.PI * 3200 / sr), hpA = Math.exp(-2 * Math.PI * 180 / sr);
+        double lp = 0, hpX = 0, hpY = 0;
+        // ducking envelope of the dry voice: fast attack (5 ms), slow release (120 ms)
+        double att = Math.exp(-1.0 / (0.005 * sr)), relD = Math.exp(-1.0 / (0.12 * sr)), env = 0, pk = 1e-9;
+        for (float v : x) pk = Math.max(pk, Math.abs(v));
+        for (int i = 0; i < n; i++) {
+            double lvl = i < x.length ? Math.abs(x[i]) / pk : 0;
+            env = lvl > env ? lvl + (env - lvl) * att : lvl + (env - lvl) * relD;
+            double duck = 1 - 0.65 * Math.min(1, env * 4);
+            double in = i < x.length ? x[i] : 0;
+            double t = i - D;
+            double del = 0;
+            if (t >= 1) { int a = (int) t; double fr = t - a; del = buf[a] * (1 - fr) + buf[a + 1 < n ? a + 1 : a] * fr; }
+            lp = (1 - lpA) * del + lpA * lp;                 // darken
+            double hp = hpA * (hpY + lp - hpX);               // thin
+            hpX = lp; hpY = hp;
+            buf[i] = in + hp * feedback;
+            y[i] = (float) (in + mix * hp * duck);
+        }
+        return y;
+    }
+
+    /** Echo without ducking (comparison). */
+    static float[] echoPlain(float[] x, int sr, double delayMs, double feedback, double mix) {
         if (mix <= 0 || delayMs <= 0) return x;
         double D = delayMs * sr / 1000.0;
         feedback = Math.max(0, Math.min(0.85, feedback));

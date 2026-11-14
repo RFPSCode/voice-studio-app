@@ -20,6 +20,7 @@ jobs:
           curl -sSL -o json.jar https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
           mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/{Dsp,Voice,Store,Pron}.java scripts/DspAB.java
           mkdir -p ab && java -cp cls:json.jar DspAB examples/校園安全時光機.voiceproj.json takes ab
+          java -Dvsnoalign=1 -cp cls:json.jar DspAB examples/校園安全時光機.voiceproj.json takes ab
       - name: Score
         run: |
           pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
@@ -44,7 +45,7 @@ jobs:
               ap2 = np.array([np.interp(fr / a, fr, row) for row in ap])
               y = pw.synthesize(f0 * prm['ratio'], sp2, ap2, sr, 5)
               sf.write(f.replace('_0clean', '_6world'), (y / max(1e-6, np.abs(y).max()) * 0.8).astype(np.float32), sr, subtype='PCM_16')
-          keys = ['0clean', '1old', '2new', '3pitch', '4form', '5ident', '6world', '7formRS', '8revO', '8revN', '9echO', '9echN', 'AlayO', 'AlayN', 'BgrlO', 'BgrlN']
+          keys = ['0clean', '1old', '2new', '2newNA', '3pitch', '3pitchNA', '4form', '4formNA', '6world', '8revO', '8revN', '9echO', '9echN', '9echD', 'AlayO', 'AlayN', 'BgrlO', 'BgrlN']
           tot = {k: {'utmos': [], 'dns': [], 'cer': []} for k in keys}
           def han(t): return re.sub(r'[^一-鿿]', '', t)
           for b in sorted(set(f.rsplit('_', 1)[0] for f in glob.glob('ab/*_0clean.wav'))):
