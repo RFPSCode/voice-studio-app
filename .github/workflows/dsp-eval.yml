@@ -24,11 +24,12 @@ jobs:
         run: |
           pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
           pip install -q librosa faster-whisper
+          git clone -q --depth 1 -b v1.2.0 https://github.com/tarepan/SpeechMOS.git /tmp/SpeechMOS
           python3 - <<'P'
           import glob, json, numpy as np, librosa, torch, warnings, difflib, re
           warnings.filterwarnings('ignore')
           from faster_whisper import WhisperModel
-          utmos = torch.hub.load('tarepan/SpeechMOS:v1.2.0', 'utmos22_strong', trust_repo=True)
+          utmos = torch.hub.load('/tmp/SpeechMOS', 'utmos22_strong', source='local', trust_repo=True)
           wm = WhisperModel('small', device='cpu', compute_type='int8')
           log = {e['id']: e for e in json.load(open('takes/log.json'))}
           keys = ['0clean', '1old', '2new']
