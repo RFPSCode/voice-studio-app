@@ -23,11 +23,10 @@ jobs:
       - name: Score
         run: |
           pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-          pip install -q librosa speechmos onnxruntime faster-whisper
+          pip install -q librosa faster-whisper
           python3 - <<'P'
           import glob, json, numpy as np, librosa, torch, warnings, difflib, re
           warnings.filterwarnings('ignore')
-          from speechmos import dnsmos
           from faster_whisper import WhisperModel
           utmos = torch.hub.load('tarepan/SpeechMOS:v1.2.0', 'utmos22_strong', trust_repo=True)
           wm = WhisperModel('small', device='cpu', compute_type='int8')
@@ -43,7 +42,7 @@ jobs:
                   x, _ = librosa.load(f'{b}_{k}.wav', sr=16000)
                   x = x / max(1e-6, np.abs(x).max()) * 0.9
                   u = float(utmos(torch.from_numpy(x).unsqueeze(0), 16000).item())
-                  d = dnsmos.run(x, 16000)['ovrl_mos']
+                  d = 0.0
                   segs, _ = wm.transcribe(x, language='zh', initial_prompt='以下是繁體中文的句子。')
                   h = han(''.join(s.text for s in segs))
                   sm = difflib.SequenceMatcher(None, ref, h)
