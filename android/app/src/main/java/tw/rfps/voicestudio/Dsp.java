@@ -329,4 +329,116 @@ public final class Dsp {
         for (int i = 0; i < y.length; i++) y[i] *= g;
         return y;
     }
+
+    // ------------------------------------------------------------ voice effects
+    static float[] fit(float[] a, int n) { return a.length == n ? a : Arrays.copyOf(a, n); }
+
+    /** Add a pitch-shifted copy of the voice (octave down = demon, octave up = shimmer). */
+    public static float[] layer(float[] x, int sr, double pitch, double formant, double mix) {
+        if (mix <= 0) return x;
+        float[] l = fit(childFx(x, sr, pitch, formant, 1.0), x.length);
+        float[] y = new float[x.length];
+        for (int i = 0; i < y.length; i++) y[i] = (float) (x[i] + mix * l[i]);
+        return y;
+    }
+
+    /** Soft-clip drive plus a fast amplitude flutter: rough, growling voice. amount 0..1 */
+    public static float[] growl(float[] x, int sr, double amount) {
+        if (amount <= 0) return x;
+        double g = 1 + amount * 7, norm = Math.tanh(g);
+        float[] y = new float[x.length];
+        for (int i = 0; i < x.length; i++) {
+            double flutter = 1 - 0.35 * amount * (0.5 + 0.5 * Math.sin(2 * Math.PI * 32 * i / sr));
+            double d = Math.tanh(g * x[i] * 2.5) / norm / 2.5;
+            y[i] = (float) ((x[i] * (1 - amount) + d * amount) * flutter);
+        }
+        return y;
+    }
+
+    /** RBJ shelving filter. low=true: low shelf. gainDb +/- */
+    public static float[] shelf(float[] x, int sr, double freq, double gainDb, boolean low) {
+        if (Math.abs(gainDb) < 0.1) return x;
+        double A = Math.pow(10, gainDb / 40), w = 2 * Math.PI * freq / sr, cs = Math.cos(w), sn = Math.sin(w);
+        double alpha = sn / 2 * Math.sqrt(2), sq = 2 * Math.sqrt(A) * alpha;
+        double b0, b1, b2, a0, a1, a2;
+        if (low) {
+            b0 = A * ((A + 1) - (A - 1) * cs + sq); b1 = 2 * A * ((A - 1) - (A + 1) * cs); b2 = A * ((A + 1) - (A - 1) * cs - sq);
+            a0 = (A + 1) + (A - 1) * cs + sq; a1 = -2 * ((A - 1) + (A + 1) * cs); a2 = (A + 1) + (A - 1) * cs - sq;
+        } else {
+            b0 = A * ((A + 1) + (A - 1) * cs + sq); b1 = -2 * A * ((A - 1) + (A + 1) * cs); b2 = A * ((A + 1) + (A - 1) * cs - sq);
+            a0 = (A + 1) - (A - 1) * cs + sq; a1 = 2 * ((A - 1) - (A + 1) * cs); a2 = (A + 1) - (A - 1) * cs - sq;
+        }
+        float[] y = new float[x.length];
+        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        for (int i = 0; i < x.length; i++) {
+            double o = (b0 * x[i] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+            x2 = x1; x1 = x[i]; y2 = y1; y1 = o;
+            y[i] = (float) o;
+        }
+        return y;
+    }
+
+    /** Feedback echo. delayMs 40..600, feedback 0..0.8, mix 0..1. Adds a tail. */
+    public static float[] echo(float[] x, int sr, double delayMs, double feedback, double mix) {
+        if (mix <= 0 || delayMs <= 0) return x;
+        int d = Math.max(1, (int) (delayMs * sr / 1000));
+        feedback = Math.max(0, Math.min(0.85, feedback));
+        int repeats = feedback > 0 ? (int) Math.ceil(Math.log(0.02) / Math.log(feedback)) : 1;
+        int tail = Math.min(sr * 2, d * Math.max(1, repeats));
+        float[] y = new float[x.length + tail];
+        double[] buf = new double[y.length];
+        for (int i = 0; i < y.length; i++) {
+            double in = i < x.length ? x[i] : 0;
+            double delayed = i >= d ? buf[i - d] : 0;
+            buf[i] = in + delayed * feedback;
+            y[i] = (float) (in + mix * delayed);
+        }
+        return y;
+    }
+
+    /** Small Schroeder reverb (4 combs + 2 all-passes). mix 0..1. Adds a 1.2 s tail. */
+    public static float[] reverb(float[] x, int sr, double mix) {
+        if (mix <= 0) return x;
+        int tail = (int) (sr * 1.2);
+        int n = x.length + tail;
+        double[] wet = new double[n];
+        int[] combs = {1116, 1188, 1277, 1356};
+        for (int c : combs) {
+            int d = c * sr / 44100;
+            double[] buf = new double[d];
+            double fb = 0.80, damp = 0.25, store = 0;
+            int p = 0;
+            for (int i = 0; i < n; i++) {
+                double in = i < x.length ? x[i] : 0;
+                double out = buf[p];
+                store = out * (1 - damp) + store * damp;
+                buf[p] = in + store * fb;
+                p = (p + 1) % d;
+                wet[i] += out * 0.25;
+            }
+        }
+        for (int a : new int[]{556, 441}) {
+            int d = a * sr / 44100;
+            double[] buf = new double[d];
+            int p = 0;
+            for (int i = 0; i < n; i++) {
+                double b = buf[p], in = wet[i];
+                double out = -in + b;
+                buf[p] = in + b * 0.5;
+                p = (p + 1) % d;
+                wet[i] = out;
+            }
+        }
+        float[] y = new float[n];
+        for (int i = 0; i < n; i++) y[i] = (float) ((i < x.length ? x[i] : 0) * (1 - mix * 0.3) + wet[i] * mix);
+        return y;
+    }
+
+    static float[] peakNorm(float[] y, float peak) {
+        float pk = 1e-6f;
+        for (float v : y) pk = Math.max(pk, Math.abs(v));
+        float g = Math.min(4f, peak / pk);
+        for (int i = 0; i < y.length; i++) y[i] *= g;
+        return y;
+    }
 }

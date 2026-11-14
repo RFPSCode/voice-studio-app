@@ -4,7 +4,7 @@
  "id": "campus-safety-time-machine",
  "title": "校園安全時光機",
  "description": "校園安全教育 3D 冒險遊戲的全部台詞（走廊、樓梯、廣場三個案例）。",
- "updated": "2026-11-14T12:00:00+08:00",
+ "updated": "2026-11-14T20:00:00+08:00",
  "engine": {
   "model": "qwen3-tts-customvoice",
   "language": "chinese",
@@ -17,108 +17,132 @@
    "id": "nar",
    "name": "旁白",
    "speaker": "uncle_fu",
-   "instruct": "成熟穩重的男聲旁白，像在說故事，咬字清楚",
+   "instruct": "說故事的語氣",
    "post": {
-    "enabled": false,
-    "pitchHz": 0,
-    "formant": 1.0,
-    "speed": 1.0
+    "enabled": true,
+    "preset": "自訂",
+    "pitchHz": 115,
+    "pitchLock": 0.5,
+    "formant": 1.0
    }
   },
   {
    "id": "teacher",
    "name": "王老師",
    "speaker": "serena",
-   "instruct": "親切的女老師，關心學生",
+   "instruct": "",
    "post": {
-    "enabled": false,
-    "pitchHz": 0,
-    "formant": 1.0,
-    "speed": 1.0
+    "enabled": true,
+    "preset": "一般女聲",
+    "pitchHz": 220,
+    "pitchLock": 0.5,
+    "formant": 1.0
    }
   },
   {
    "id": "devil",
    "name": "小惡魔",
    "speaker": "ryan",
-   "instruct": "調皮又邪惡的小惡魔，聲音尖細、說話帶點壞笑",
+   "instruct": "",
    "post": {
-    "enabled": false,
-    "pitchHz": 0,
-    "formant": 1.0,
-    "speed": 1.0
+    "enabled": true,
+    "preset": "惡魔",
+    "pitchHz": 140,
+    "pitchLock": 0.5,
+    "formant": 0.94,
+    "octDown": 0.35,
+    "growl": 0.25,
+    "bassDb": 3,
+    "echoMs": 110,
+    "echoFeedback": 0.3,
+    "echoMix": 0.25
    }
   },
   {
    "id": "angel",
    "name": "小天使",
    "speaker": "serena",
-   "instruct": "溫暖、明亮的小天使，說話輕柔",
+   "instruct": "",
    "post": {
     "enabled": true,
-    "pitchHz": 300,
-    "formant": 1.1,
-    "speed": 1.0
+    "preset": "天使",
+    "pitchHz": 290,
+    "pitchLock": 0.5,
+    "formant": 1.08,
+    "octUp": 0.18,
+    "trebleDb": 3,
+    "reverb": 0.35
    }
   },
   {
    "id": "me_b",
    "name": "主角男生(五年級)",
    "speaker": "aiden",
-   "instruct": "小學五年級男生，聲音年輕有活力",
+   "instruct": "",
    "post": {
     "enabled": true,
-    "pitchHz": 240,
-    "formant": 1.14,
-    "speed": 1.0
+    "preset": "自訂",
+    "pitchHz": 255,
+    "pitchLock": 0.6,
+    "formant": 1.15,
+    "trebleDb": 1
    }
   },
   {
    "id": "me_g",
    "name": "主角女生(五年級)",
    "speaker": "vivian",
-   "instruct": "小學五年級女生，聲音清亮",
+   "instruct": "",
    "post": {
     "enabled": true,
-    "pitchHz": 265,
-    "formant": 1.14,
-    "speed": 1.0
+    "preset": "自訂",
+    "pitchHz": 275,
+    "pitchLock": 0.6,
+    "formant": 1.16,
+    "trebleDb": 1
    }
   },
   {
    "id": "xiaokai",
    "name": "小凱(五年級)",
    "speaker": "aiden",
-   "instruct": "小學五年級男生，愛玩、說話大聲",
+   "instruct": "",
    "post": {
     "enabled": true,
-    "pitchHz": 225,
-    "formant": 1.12,
-    "speed": 1.0
+    "preset": "自訂",
+    "pitchHz": 240,
+    "pitchLock": 0.6,
+    "formant": 1.13,
+    "trebleDb": 1
    }
   },
   {
    "id": "xiaoyu",
    "name": "小宇(二年級)",
-   "speaker": "vivian",
-   "instruct": "小學二年級男生，聲音稚嫩",
+   "speaker": "aiden",
+   "instruct": "",
    "post": {
     "enabled": true,
+    "preset": "自訂",
     "pitchHz": 290,
-    "formant": 1.2,
-    "speed": 1.0
+    "pitchLock": 0.6,
+    "formant": 1.22,
+    "trebleDb": 1
    }
   },
   {
    "id": "xiaomei",
    "name": "小美(二年級)",
    "speaker": "vivian",
-   "instruct": "小學二年級女生，聲音稚嫩可愛",
+   "instruct": "",
    "post": {
     "enabled": true,
+    "preset": "自訂",
     "pitchHz": 310,
-    "formant": 1.22,
-    "speed": 1.0
+    "pitchLock": 0.5,
+    "formant": 1.2,
+    "speed": 1.03,
+    "trebleDb": 2
    }
   }
  ],

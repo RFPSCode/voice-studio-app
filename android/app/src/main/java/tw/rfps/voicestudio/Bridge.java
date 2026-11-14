@@ -238,7 +238,12 @@ public class Bridge {
 
     // ------------------------------------------------------------ generation
     @JavascriptInterface
-    public void generate(String pid, String idsJson, int takes) {
+    public void generate(String pid, String idsJson, int takes) { run(pid, idsJson, takes, false); }
+
+    @JavascriptInterface
+    public void regenerate(String pid, String idsJson) { run(pid, idsJson, 1, true); }
+
+    private void run(String pid, String idsJson, int takes, boolean chooseNew) {
         start("產生語音", () -> {
             List<String> only = null;
             if (idsJson != null && !idsJson.trim().isEmpty()) {
@@ -248,7 +253,7 @@ public class Bridge {
             }
             loadEngine();
             long t0 = System.currentTimeMillis();
-            int n = store.generate(pid, only, Math.max(1, Math.min(4, takes)), activeModel(), engine, progress());
+            int n = store.generate(pid, only, Math.max(1, Math.min(4, takes)), activeModel(), engine, progress(), chooseNew);
             emit("log", "msg", (cancel.get() ? "■ 已停止。" : "✓ 完成。") + "這次產生 " + n + " 個版本，用了 " + (System.currentTimeMillis() - t0) / 1000 + " 秒");
             emit("refresh");
         });

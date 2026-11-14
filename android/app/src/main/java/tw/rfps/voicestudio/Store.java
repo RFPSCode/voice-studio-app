@@ -142,7 +142,7 @@ public class Store {
             JSONObject post = r.optJSONObject("post");
             if (post != null && post.optBoolean("enabled")) {
                 double ph = post.optDouble("pitchHz", 0), fo = post.optDouble("formant", 1), sp = post.optDouble("speed", 1);
-                if (ph != 0 && (ph < 100 || ph > 500)) err.add("角色 " + id + " 的 pitchHz 超出範圍");
+                if (ph != 0 && (ph < 80 || ph > 500)) err.add("角色 " + id + " 的 pitchHz 超出範圍");
                 if (fo < 0.8 || fo > 1.4) err.add("角色 " + id + " 的 formant 超出範圍 0.8–1.4");
                 if (sp < 0.7 || sp > 1.3) err.add("角色 " + id + " 的 speed 超出範圍 0.7–1.3");
             }
@@ -338,6 +338,11 @@ public class Store {
      * when the line has no chosen take yet.
      */
     public int generate(String id, List<String> only, int takes, String model, Synth engine, Progress pr) throws Exception {
+        return generate(id, only, takes, model, engine, pr, false);
+    }
+
+    /** chooseNew: the first new take of every line becomes the chosen one ("regenerate all"). */
+    public int generate(String id, List<String> only, int takes, String model, Synth engine, Progress pr, boolean chooseNew) throws Exception {
         JSONObject p = project(id);
         JSONObject eng = p.optJSONObject("engine") != null ? p.optJSONObject("engine") : new JSONObject();
         String lang = eng.optString("language", "chinese");
@@ -345,6 +350,7 @@ public class Store {
         float topP = (float) eng.optDouble("topP", 0);
         long seed0 = eng.optLong("seed", -1);
         JSONArray lines = p.getJSONArray("lines");
+        baseF0.clear();
         int made = 0;
         for (int i = 0; i < lines.length(); i++) {
             if (pr.cancelled()) break;
@@ -360,7 +366,7 @@ public class Store {
             boolean fresh = s == null || !sig.equals(s.optString("sig"));
             JSONArray tk = fresh || s.optJSONArray("takes") == null ? new JSONArray() : s.getJSONArray("takes");
             for (int t = 0; t < takes && !pr.cancelled(); t++) {
-                long seed = seed0 >= 0 ? seed0 + tk.length() : -1;
+                long seed = (seed0 >= 0 ? seed0 : roleSeed(roleOf(p, role))) + 7919L * tk.length();
                 pr.line(id, lid, "running", new JSONObject().put("take", tk.length() + 1).put("of", takes));
                 long t0 = System.currentTimeMillis();
                 float[] a;
@@ -384,7 +390,7 @@ public class Store {
                 s = ls.optJSONObject(lid);
                 if (s == null || fresh) { s = new JSONObject(); ls.put(lid, s); fresh = false; }
                 s.put("sig", sig).put("takes", tk);
-                if (s.optInt("chosen", -1) < 0) {
+                if (s.optInt("chosen", -1) < 0 || (chooseNew && t == 0)) {
                     s.put("chosen", k);
                 }
                 saveState(id, st);
@@ -435,16 +441,60 @@ public class Store {
 
     public void invalidateBase(String id, String role) { baseF0.remove(id + "/" + role); }
 
+    /** Ready-made post-processing sets (same names/values as the web UI, the PC editor and the spec). */
+    public static final String PRESETS_JSON = "{"
+        + "\"男童\":{\"pitchHz\":270,\"pitchLock\":0.6,\"formant\":1.17,\"trebleDb\":1},"
+        + "\"女童\":{\"pitchHz\":300,\"pitchLock\":0.6,\"formant\":1.2,\"trebleDb\":1},"
+        + "\"可愛女聲\":{\"pitchHz\":290,\"pitchLock\":0.5,\"formant\":1.1,\"speed\":1.03,\"trebleDb\":2},"
+        + "\"渾厚男聲\":{\"pitchHz\":100,\"pitchLock\":0.5,\"formant\":0.92,\"bassDb\":4,\"trebleDb\":-1},"
+        + "\"一般女聲\":{\"pitchHz\":220,\"pitchLock\":0.5,\"formant\":1.0},"
+        + "\"一般男聲\":{\"pitchHz\":125,\"pitchLock\":0.5,\"formant\":1.0},"
+        + "\"惡魔\":{\"pitchHz\":140,\"pitchLock\":0.5,\"formant\":0.94,\"octDown\":0.35,\"growl\":0.25,\"bassDb\":3,\"echoMs\":110,\"echoFeedback\":0.3,\"echoMix\":0.25},"
+        + "\"天使\":{\"pitchHz\":290,\"pitchLock\":0.5,\"formant\":1.08,\"octUp\":0.18,\"trebleDb\":3,\"reverb\":0.35}"
+        + "}";
+
+    static double num(JSONObject o, String k, double d, double lo, double hi) {
+        double v = o.optDouble(k, d);
+        if (Double.isNaN(v)) v = d;
+        return Math.max(lo, Math.min(hi, v));
+    }
+
+    /**
+     * Post-processing chain (spec §2.3.1):
+     * pitch/formant/speed → octave layers → growl → bass/treble → loudness → echo → reverb.
+     * baseF0 = the role's typical pitch; pitchLock 0 keeps each line's own pitch relative to it, 1 makes every line hit pitchHz.
+     */
     public static float[] applyPost(float[] a, JSONObject post, double baseF0) {
         if (post == null || !post.optBoolean("enabled")) return a;
-        double target = post.optDouble("pitchHz", 0), formant = post.optDouble("formant", 1), speed = post.optDouble("speed", 1);
+        double target = num(post, "pitchHz", 0, 0, 500), lock = num(post, "pitchLock", 0.5, 0, 1);
+        double formant = num(post, "formant", 1, 0.8, 1.4), speed = num(post, "speed", 1, 0.7, 1.3);
         double ratio = 1;
         if (target > 0) {
             double line = Dsp.medianF0(a, SR);
             double base = baseF0 > 0 ? baseF0 : line;
-            if (base > 0) ratio = Math.max(0.5, Math.min(3.0, target / base));
+            if (line <= 0) line = base;
+            if (base > 0) ratio = Math.max(0.4, Math.min(3.0, target / (Math.pow(base, 1 - lock) * Math.pow(line, lock))));
         }
-        return Dsp.tidy(Dsp.childFx(a, SR, ratio, formant, speed), SR);
+        float[] y = (Math.abs(ratio - 1) > 1e-3 || Math.abs(formant - 1) > 1e-3 || Math.abs(speed - 1) > 1e-3)
+            ? Dsp.childFx(a, SR, ratio, formant, speed) : a.clone();
+        y = Dsp.layer(y, SR, 0.5, 0.8, num(post, "octDown", 0, 0, 1));
+        y = Dsp.layer(y, SR, 2.0, 1.15, num(post, "octUp", 0, 0, 1) * 0.6);
+        y = Dsp.growl(y, SR, num(post, "growl", 0, 0, 1));
+        y = Dsp.shelf(y, SR, 220, num(post, "bassDb", 0, -12, 12), true);
+        y = Dsp.shelf(y, SR, 3800, num(post, "trebleDb", 0, -12, 12), false);
+        y = Dsp.tidy(y, SR);
+        y = Dsp.echo(y, SR, num(post, "echoMs", 0, 0, 800), num(post, "echoFeedback", 0.3, 0, 0.85), num(post, "echoMix", 0, 0, 1));
+        y = Dsp.reverb(y, SR, num(post, "reverb", 0, 0, 1));
+        return Dsp.peakNorm(y, 0.95f);
+    }
+
+    /** Fixed starting seed for a role, so every line of a character starts from the same voice. */
+    public static long roleSeed(JSONObject role) {
+        if (role.has("seed")) return role.optLong("seed", 1);
+        String id = role.optString("id");
+        long h = 1125899906842597L;
+        for (int i = 0; i < id.length(); i++) h = 31 * h + id.charAt(i);
+        return (h & 0x7fffffffL) % 1000000007L;
     }
 
     /** chosen take -> out/&lt;line&gt;.wav with the role's post settings */

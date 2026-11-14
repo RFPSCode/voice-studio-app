@@ -107,6 +107,7 @@ pre{white-space:pre-wrap;font-size:11.5px;background:#1b1d3a;color:#d6d4ff;borde
    <button class="b" id="btnGen" onclick="genAll()">▶ 產生未完成的句子</button>
    <button class="b red" onclick="VS.cancel()">■ 停止</button>
   </div>
+  <div class="row" style="margin-top:8px"><button class="b sm gray" onclick="regenAll()">↻ 全部重新產生</button><span class="hint">換了音色或想讓全部句子用新設定重錄時使用</span></div>
   <div class="row" style="margin-top:8px">
    <button class="b green" onclick="VS.export(P,false)">⬇ 匯出到下載資料夾</button>
    <button class="b gray" onclick="VS.export(P,true)">↗ 分享</button>
@@ -122,9 +123,8 @@ pre{white-space:pre-wrap;font-size:11.5px;background:#1b1d3a;color:#d6d4ff;borde
 <!-- ================= 角色 ================= -->
 <section id="t-role" class="hide">
  <div class="card hint">
-  <b>兒童音色後製</b>：模型沒有小孩的聲音，所以小孩角色用年輕的聲音錄，再在手機上調高<b>音高</b>和<b>共振峰</b>變成小孩。
-  音高是這個角色的平均音高（8 歲約 280–320 Hz、11 歲約 230–270 Hz）；共振峰 1.15–1.25 最像小孩，只調音高會像卡通鼠聲。
-  在這裡調整會覆蓋專案檔的設定，不用重錄、不用網路。
+  <b>後製</b>：每個角色固定一個音色，再用後製做出角色感：<b>男童、女童、可愛女聲、渾厚男聲、一般女聲、一般男聲、惡魔、天使</b>，或打開「細項調整」自己調。
+  「音高統一」會把每一句拉到同樣的音高，讓同一個角色聽起來一致。在這裡調整會覆蓋專案檔的設定，不用重錄、不用網路。
  </div>
  <div id="roles"></div>
 </section>
@@ -157,7 +157,14 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let INFO=null,P=localStorage.getItem('vs_p')||'',S=null,FILT='',RUN={},cur='proj';
 const SPK={vivian:'Vivian 明亮年輕女聲',serena:'Serena 溫柔年輕女聲',uncle_fu:'Uncle Fu 成熟低沉男聲',dylan:'Dylan 年輕男聲（北京腔）',eric:'Eric 活潑男聲（四川腔）',ryan:'Ryan 有活力的男聲',aiden:'Aiden 陽光年輕男聲',ono_anna:'Ono Anna 日文女聲',sohee:'Sohee 韓文女聲'};
-const PRE={'不處理':{enabled:false,pitchHz:0,formant:1,speed:1},'8歲男孩':{enabled:true,pitchHz:290,formant:1.20,speed:1},'8歲女孩':{enabled:true,pitchHz:310,formant:1.22,speed:1},'11歲男孩':{enabled:true,pitchHz:240,formant:1.14,speed:1},'11歲女孩':{enabled:true,pitchHz:265,formant:1.14,speed:1},'小天使':{enabled:true,pitchHz:300,formant:1.10,speed:1}};
+const PRE={'男童':{pitchHz:270,pitchLock:0.6,formant:1.17,trebleDb:1},'女童':{pitchHz:300,pitchLock:0.6,formant:1.2,trebleDb:1},'可愛女聲':{pitchHz:290,pitchLock:0.5,formant:1.1,speed:1.03,trebleDb:2},'渾厚男聲':{pitchHz:100,pitchLock:0.5,formant:0.92,bassDb:4,trebleDb:-1},'一般女聲':{pitchHz:220,pitchLock:0.5,formant:1.0},'一般男聲':{pitchHz:125,pitchLock:0.5,formant:1.0},'惡魔':{pitchHz:140,pitchLock:0.5,formant:0.94,octDown:0.35,growl:0.25,bassDb:3,echoMs:110,echoFeedback:0.3,echoMix:0.25},'天使':{pitchHz:290,pitchLock:0.5,formant:1.08,octUp:0.18,trebleDb:3,reverb:0.35}};
+// [key, label, min, max, step, default, unit]
+const FIELDS=[['pitchHz','音高',0,450,5,0,'Hz'],['pitchLock','音高統一',0,1,0.05,0.5,''],['formant','共振峰',0.8,1.4,0.01,1,'×'],['speed','語速',0.7,1.3,0.01,1,'×'],
+ ['octDown','低八度疊音',0,1,0.05,0,''],['octUp','高八度疊音',0,1,0.05,0,''],['growl','沙啞',0,1,0.05,0,''],['bassDb','低音',-12,12,1,0,'dB'],['trebleDb','高音',-12,12,1,0,'dB'],
+ ['echoMs','回聲延遲',0,600,10,0,'ms'],['echoFeedback','回聲次數',0,0.8,0.05,0.3,''],['echoMix','回聲量',0,1,0.05,0,''],['reverb','殘響',0,1,0.05,0,'']];
+function fullPost(p){const o={enabled:!!(p&&p.enabled),preset:(p&&p.preset)||''};FIELDS.forEach(f=>o[f[0]]=p&&p[f[0]]!=null?+p[f[0]]:f[5]);return o;}
+function presetPost(name){if(name==='不處理')return fullPost({enabled:false,preset:'不處理'});return fullPost(Object.assign({enabled:true,preset:name},PRE[name]||{}));}
+function fmtF(f,v){if(f[0]==='pitchHz')return +v?v+' Hz':'不變';if(f[6]==='×')return '×'+(+v).toFixed(2);if(f[6]==='dB')return (v>0?'+':'')+v+' dB';if(f[6]==='ms')return +v?v+' ms':'關';return (+v).toFixed(2);}
 function J(s){try{return JSON.parse(s)}catch(e){return {error:String(e)}}}
 function toast(m){$('#dMsg').textContent=m;}
 function play(u){const a=$('#aud');a.src=u+(u.includes('?')?'&':'?')+'r='+Date.now();a.play().catch(()=>{});}
@@ -211,35 +218,34 @@ function lineCard(l){
 function pickTake(lid,k){play(fileUrl(`projects/${P}/takes/${lid}_${k}.wav`));const r=VS.choose(P,lid,k);if(r!=='ok')toast(r);else{S=J(VS.summary(P));renderRec();}}
 function more(lid){const l=S.lines.find(x=>x.id===lid);VS.generate(P,JSON.stringify([lid]),(l.takes||[]).length?2:1);}
 function genAll(){VS.generate(P,'',1);}
+function regenAll(){if(confirm('全部 '+S.total+' 句重新產生？會花比較久的時間（原本的版本會保留，可以再選回來）。'))VS.regenerate(P,JSON.stringify(S.lines.map(l=>l.id)));}
 $$('#filters button').forEach(b=>b.onclick=()=>{FILT=b.dataset.f;renderRec();});
 
 function renderRoles(){
  if(!S)return;
- $('#roles').innerHTML=S.project.roles.map(r=>{const p=Object.assign({enabled:false,pitchHz:0,formant:1,speed:1},S.posts[r.id]||{});
+ $('#roles').innerHTML=S.project.roles.map(r=>{const p=fullPost(S.posts[r.id]);const pre=p.enabled?(p.preset||'自訂'):'不處理';
   const done=S.lines.filter(l=>l.role===r.id&&l.chosen>=0);
   return `<div class="card" data-r="${r.id}"><h3>${esc(r.name)} <span class="hint">${esc(r.id)}</span></h3>
-   <div class="hint">🔊 ${esc(SPK[r.speaker]||r.speaker)}${r.instruct?`<br>🎭 ${esc(r.instruct)}`:''}</div>
-   <div class="fx ${p.enabled?'on':''}"><label class="row" style="font-weight:700"><input type="checkbox" class="en" ${p.enabled?'checked':''}> 🧒 兒童音色後製</label>
-    <div class="presets">${Object.keys(PRE).map(k=>`<button data-p="${k}">${k}</button>`).join('')}</div>
-    <div class="sl">音高<input type="range" class="ph" min="0" max="450" step="5" value="${p.pitchHz}"><b class="vph"></b></div>
-    <div class="sl">共振峰<input type="range" class="fo" min="0.85" max="1.4" step="0.01" value="${p.formant}"><b class="vfo"></b></div>
-    <div class="sl">語速<input type="range" class="sp" min="0.7" max="1.3" step="0.01" value="${p.speed}"><b class="vsp"></b></div>
-    ${done.length?`<select class="smp">${done.map(l=>`<option value="${l.id}">#${l.id}　${esc(l.text.slice(0,18))}</option>`).join('')}</select>
-    <div class="row" style="margin-top:8px"><button class="b sm gray a-raw">▶ 原始</button><button class="b sm a-prev">▶ 後製試聽</button><button class="b sm green a-apply">套用到全部台詞</button></div>`:'<div class="hint">這個角色還沒有錄好的句子，錄好後才能試聽。</div>'}
+   <div class="hint">🔊 固定音色：${esc(SPK[r.speaker]||r.speaker)}${r.instruct?`<br>🎭 ${esc(r.instruct)}`:''}</div>
+   <div class="fx ${p.enabled?'on':''}"><div class="row" style="font-weight:700;flex-wrap:nowrap">🎚 後製<select class="pre" style="flex:1">${['不處理',...Object.keys(PRE),'自訂'].map(k=>`<option ${k===pre?'selected':''}>${k}</option>`).join('')}</select></div>
+    <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">細項調整</summary>
+    ${FIELDS.map(f=>`<div class="sl">${f[1]}<input type="range" data-k="${f[0]}" min="${f[2]}" max="${f[3]}" step="${f[4]}" value="${p[f[0]]}"><b data-v="${f[0]}"></b></div>`).join('')}
+    <div class="hint">音高：這個角色的平均音高（0＝不改）。音高統一：越大，每句的音高越接近設定值，聲音越一致。疊音、沙啞、回聲、殘響適合惡魔、天使、機器人等角色。</div></details>
+    ${done.length?`<select class="smp" style="margin-top:8px">${done.map(l=>`<option value="${l.id}">#${l.id}　${esc(l.text.slice(0,18))}</option>`).join('')}</select>
+    <div class="row" style="margin-top:8px"><button class="b sm gray a-raw">▶ 原始</button><button class="b sm a-prev">▶ 後製試聽</button><button class="b sm green a-apply">套用到全部台詞</button></div>`:'<div class="hint" style="margin-top:6px">這個角色還沒有錄好的句子，錄好後才能試聽。</div>'}
     <div class="row" style="margin-top:6px"><button class="b sm gray a-reset">恢復專案檔的設定</button></div></div></div>`;}).join('');
- $$('#roles .card').forEach(card=>{const rid=card.dataset.r;
-  const upd=()=>{card.querySelector('.vph').textContent=+card.querySelector('.ph').value?card.querySelector('.ph').value+' Hz':'不變';card.querySelector('.vfo').textContent='×'+(+card.querySelector('.fo').value).toFixed(2);card.querySelector('.vsp').textContent='×'+(+card.querySelector('.sp').value).toFixed(2);card.querySelector('.fx').classList.toggle('on',card.querySelector('.en').checked);};
-  upd();card.querySelectorAll('input').forEach(i=>i.oninput=upd);
-  card.querySelectorAll('.presets button').forEach(b=>b.onclick=()=>{const q=PRE[b.dataset.p];card.querySelector('.en').checked=q.enabled;card.querySelector('.ph').value=q.pitchHz;card.querySelector('.fo').value=q.formant;card.querySelector('.sp').value=q.speed;upd();});
-  const post=()=>({enabled:card.querySelector('.en').checked,pitchHz:+card.querySelector('.ph').value,formant:+card.querySelector('.fo').value,speed:+card.querySelector('.sp').value});
+ $$('#roles .card').forEach(card=>{const rid=card.dataset.r;let cur=fullPost(S.posts[rid]);
+  const show=()=>{FIELDS.forEach(f=>{card.querySelector(`[data-k=${f[0]}]`).value=cur[f[0]];card.querySelector(`[data-v=${f[0]}]`).textContent=fmtF(f,cur[f[0]]);});card.querySelector('.fx').classList.toggle('on',cur.enabled);};
+  show();
+  card.querySelector('.pre').onchange=e=>{const n=e.target.value;if(n==='自訂'){cur.enabled=true;cur.preset='自訂';}else cur=presetPost(n);show();};
+  card.querySelectorAll('input[type=range]').forEach(i=>i.oninput=()=>{cur[i.dataset.k]=+i.value;cur.enabled=true;cur.preset='自訂';card.querySelector('.pre').value='自訂';show();});
   const smp=()=>card.querySelector('.smp')?card.querySelector('.smp').value:'';
   const ra=card.querySelector('.a-raw');if(ra)ra.onclick=()=>{const l=S.lines.find(x=>x.id===smp());if(l)play(fileUrl(`projects/${P}/takes/${l.id}_${l.chosen}.wav`));};
-  const pv=card.querySelector('.a-prev');if(pv)pv.onclick=()=>VS.previewPost(P,smp(),JSON.stringify(post()));
-  const ap=card.querySelector('.a-apply');if(ap)ap.onclick=()=>VS.setRolePost(P,rid,JSON.stringify(post()));
+  const pv=card.querySelector('.a-prev');if(pv)pv.onclick=()=>{if(!cur.enabled){const l=S.lines.find(x=>x.id===smp());if(l)play(fileUrl(`projects/${P}/takes/${l.id}_${l.chosen}.wav`));return;}VS.previewPost(P,smp(),JSON.stringify(cur));};
+  const ap=card.querySelector('.a-apply');if(ap)ap.onclick=()=>VS.setRolePost(P,rid,JSON.stringify(cur));
   card.querySelector('.a-reset').onclick=()=>{if(confirm('恢復成專案檔裡的設定？'))VS.setRolePost(P,rid,'');};
  });
 }
-
 function renderModels(){
  $('#mirror').value=INFO.mirror||'';
  $('#models').innerHTML=INFO.models.map(m=>{const got=m.files.reduce((a,f)=>a+f.bytes,0);

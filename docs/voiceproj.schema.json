@@ -3,33 +3,97 @@
   "$id": "https://github.com/RFPSCode/voice-studio-app/docs/voiceproj.schema.json",
   "title": "語音專案檔 voice-studio-project v1",
   "type": "object",
-  "required": ["format", "version", "id", "title", "roles", "lines"],
+  "required": [
+    "format",
+    "version",
+    "id",
+    "title",
+    "roles",
+    "lines"
+  ],
   "additionalProperties": true,
   "properties": {
-    "format": { "const": "voice-studio-project" },
-    "version": { "const": 1 },
-    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" },
-    "title": { "type": "string", "minLength": 1, "maxLength": 80 },
-    "description": { "type": "string" },
-    "updated": { "type": "string" },
+    "format": {
+      "const": "voice-studio-project"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,63}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "description": {
+      "type": "string"
+    },
+    "updated": {
+      "type": "string"
+    },
     "engine": {
       "type": "object",
       "properties": {
-        "model": { "enum": ["qwen3-tts-customvoice"] },
-        "language": { "enum": ["chinese", "english", "japanese", "korean", "german", "french", "russian", "portuguese", "spanish", "italian", "auto"] },
-        "temperature": { "type": "number", "minimum": 0, "maximum": 1.5 },
-        "topP": { "type": "number", "minimum": 0, "maximum": 1 },
-        "seed": { "type": "integer" }
+        "model": {
+          "enum": [
+            "qwen3-tts-customvoice"
+          ]
+        },
+        "language": {
+          "enum": [
+            "chinese",
+            "english",
+            "japanese",
+            "korean",
+            "german",
+            "french",
+            "russian",
+            "portuguese",
+            "spanish",
+            "italian",
+            "auto"
+          ]
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.5
+        },
+        "topP": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "seed": {
+          "type": "integer"
+        }
       },
       "additionalProperties": true
     },
-    "instruct": { "type": "string", "maxLength": 200 },
+    "instruct": {
+      "type": "string",
+      "maxLength": 200
+    },
     "pronunciation": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["from", "to"],
-        "properties": { "from": { "type": "string", "minLength": 1 }, "to": { "type": "string" } }
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1
+          },
+          "to": {
+            "type": "string"
+          }
+        }
       }
     },
     "roles": {
@@ -37,20 +101,128 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "name", "speaker"],
+        "required": [
+          "id",
+          "name",
+          "speaker"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,40}$" },
-          "name": { "type": "string", "minLength": 1 },
-          "speaker": { "enum": ["vivian", "serena", "uncle_fu", "dylan", "eric", "ryan", "aiden", "ono_anna", "sohee"] },
-          "instruct": { "type": "string", "maxLength": 200 },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "speaker": {
+            "enum": [
+              "vivian",
+              "serena",
+              "uncle_fu",
+              "dylan",
+              "eric",
+              "ryan",
+              "aiden",
+              "ono_anna",
+              "sohee"
+            ]
+          },
+          "instruct": {
+            "type": "string",
+            "maxLength": 200
+          },
           "post": {
             "type": "object",
             "properties": {
-              "enabled": { "type": "boolean" },
-              "pitchHz": { "type": "number", "minimum": 0, "maximum": 500 },
-              "formant": { "type": "number", "minimum": 0.8, "maximum": 1.4 },
-              "speed": { "type": "number", "minimum": 0.7, "maximum": 1.3 }
+              "enabled": {
+                "type": "boolean"
+              },
+              "preset": {
+                "enum": [
+                  "",
+                  "不處理",
+                  "男童",
+                  "女童",
+                  "可愛女聲",
+                  "渾厚男聲",
+                  "一般女聲",
+                  "一般男聲",
+                  "惡魔",
+                  "天使",
+                  "自訂"
+                ]
+              },
+              "pitchHz": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 500
+              },
+              "pitchLock": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "formant": {
+                "type": "number",
+                "minimum": 0.8,
+                "maximum": 1.4
+              },
+              "speed": {
+                "type": "number",
+                "minimum": 0.7,
+                "maximum": 1.3
+              },
+              "octDown": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "octUp": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "growl": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "bassDb": {
+                "type": "number",
+                "minimum": -12,
+                "maximum": 12
+              },
+              "trebleDb": {
+                "type": "number",
+                "minimum": -12,
+                "maximum": 12
+              },
+              "echoMs": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 800
+              },
+              "echoFeedback": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.85
+              },
+              "echoMix": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "reverb": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
             }
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }
@@ -60,27 +232,80 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "role", "text"],
+        "required": [
+          "id",
+          "role",
+          "text"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,40}$" },
-          "role": { "type": "string" },
-          "text": { "type": "string", "minLength": 1, "maxLength": 300 },
-          "say": { "type": "string", "maxLength": 300 },
-          "instruct": { "type": "string", "maxLength": 200 },
-          "key": { "type": "string" },
-          "note": { "type": "string" }
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$"
+          },
+          "role": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "say": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "instruct": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "key": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
         }
       }
     },
     "output": {
       "type": "object",
       "properties": {
-        "type": { "enum": ["game-voice-v1"] },
-        "sampleRate": { "const": 24000 },
-        "mp3Kbps": { "enum": [32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160] },
-        "leadSec": { "type": "number", "minimum": 0, "maximum": 3 },
-        "gapSec": { "type": "number", "minimum": 0.1, "maximum": 3 },
-        "keyFormat": { "type": "string" }
+        "type": {
+          "enum": [
+            "game-voice-v1"
+          ]
+        },
+        "sampleRate": {
+          "const": 24000
+        },
+        "mp3Kbps": {
+          "enum": [
+            32,
+            40,
+            48,
+            56,
+            64,
+            80,
+            96,
+            112,
+            128,
+            144,
+            160
+          ]
+        },
+        "leadSec": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "gapSec": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 3
+        },
+        "keyFormat": {
+          "type": "string"
+        }
       }
     }
   }

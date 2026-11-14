@@ -66,7 +66,7 @@ jobs:
           tail -20 /tmp/server.log
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
-      - name: Child-voice post-processing (same Java code as the phone)
+      - name: Post-processing (same Java code as the phone)
         run: |
           curl -sSL -o json.jar https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
           mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/Dsp.java android/app/src/main/java/tw/rfps/voicestudio/Store.java scripts/DspCheck.java
@@ -77,7 +77,7 @@ jobs:
               post = roles[e['role']].get('post') or {}
               if post.get('enabled'):
                   f = 'out/%s_%s.wav' % (e['id'], e['role'])
-                  subprocess.run(['java', '-cp', 'cls:json.jar', 'DspCheck', f, f.replace('.wav', '_child.wav'), str(post['pitchHz']), str(post['formant'])], check=True)
+                  subprocess.run(['java', '-cp', 'cls:json.jar', 'DspCheck', f, f.replace('.wav', '_child.wav'), json.dumps(post, ensure_ascii=False)], check=True)
                   e2 = dict(e, id=e['id'] + '_child'); print(e2['id'])
           P
       - name: Transcribe (check the words)
