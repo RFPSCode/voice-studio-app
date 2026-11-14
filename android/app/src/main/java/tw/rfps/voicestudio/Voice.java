@@ -253,66 +253,99 @@ public final class Voice {
         Marks m = marks(x, sr, tr);
         if (m.n < 2) return Math.abs(time - 1) < 1e-6 ? x.clone() : Dsp.fit(x, (int) Math.round(x.length * time));
         int L = (int) Math.round(x.length * time);
-        double[] out = new double[L + sr / 10], wsum = new double[out.length];
+        // pass 1: synthesis marks (output position, source centre, voiced, cap = how far the grain may reach)
+        int cap0 = 64;
+        double[] sPos = new double[cap0];
+        int[] sSrc = new int[cap0], capL = new int[cap0], capR = new int[cap0];
+        double[] sGain = new double[cap0];
+        int ns = 0;
         long rnd = 0x9E3779B97F4A7C15L;
         double ts = m.pos[0] * time;
-        int j = 0, k = 0;
+        int k = 0;
+        final int U = sr / 100;
         while (ts < L) {
             double ta = ts / time;
             while (k + 1 < m.n && Math.abs(m.pos[k + 1] - ta) <= Math.abs(m.pos[k] - ta)) k++;
             while (k > 0 && Math.abs(m.pos[k - 1] - ta) < Math.abs(m.pos[k] - ta)) k--;
-            boolean v = m.voiced[k] && Math.abs(m.pos[k] - ta) < m.period[k] * 1.5;
-            int at = (int) Math.round(ts);
+            boolean v = m.voiced[k]
+                && !(ta > m.pos[k] + 0.55 * m.period[k] && !linked(m, k))          // past the end of a voiced run
+                && !(ta < m.pos[k] - 0.55 * m.period[k] && !linked(m, k - 1));     // before its start
+            if (ns == sPos.length) {
+                int c2 = ns * 2;
+                sPos = Arrays.copyOf(sPos, c2); sSrc = Arrays.copyOf(sSrc, c2); capL = Arrays.copyOf(capL, c2); capR = Arrays.copyOf(capR, c2); sGain = Arrays.copyOf(sGain, c2);
+            }
+            sPos[ns] = ts;
             if (v) {
                 double Pa = m.period[k];
                 int c = m.pos[k];
-                int lh = (int) Math.round(k > 0 && m.voiced[k - 1] ? Math.min(1.5 * Pa, Math.max(0.5 * Pa, c - m.pos[k - 1])) : Pa);
-                int rh = (int) Math.round(k + 1 < m.n && m.voiced[k + 1] ? Math.min(1.5 * Pa, Math.max(0.5 * Pa, m.pos[k + 1] - c)) : Pa);
-                double g = (growl > 0 && (j & 1) == 1) ? 1 - 0.55 * growl : 1;
-                grain(x, c, lh, rh, out, wsum, at, g);
-                // synthesis spacing: the real distance to the next pulse (keeps the natural jitter; exact at pitch 1)
-                double fwd = k + 1 < m.n && m.voiced[k + 1] ? m.pos[k + 1] - c : Pa;
-                if (fwd < 0.6 * Pa || fwd > 1.6 * Pa) fwd = Pa;
+                // a grain may reach to the neighbouring pulses, never past them
+                capL[ns] = linked(m, k - 1) ? c - m.pos[k - 1] : (int) Math.round(Pa);
+                capR[ns] = linked(m, k) ? m.pos[k + 1] - c : (int) Math.round(Pa);
+                sSrc[ns] = c;
+                sGain[ns] = (growl > 0 && (ns & 1) == 1) ? 1 - 0.55 * growl : 1;
+                // the real distance to the next pulse (keeps the natural rhythm, also of creaky / irregular pulses)
+                double fwd = capR[ns];
                 double Ps = fwd / pitch;
                 if (growl > 0) {
                     rnd ^= rnd << 13; rnd ^= rnd >>> 7; rnd ^= rnd << 17;
                     double u = ((rnd >>> 11) * 0x1.0p-53) * 2 - 1;
                     Ps *= 1 + growl * 0.05 * u;
                 }
+                ns++;
                 ts += Math.max(2, Ps);
             } else {
-                int P = sr / 100;
-                grain(x, (int) Math.round(ta), P, P, out, wsum, at, 1);
-                double next = ts + P;
+                sSrc[ns] = (int) Math.round(ta);
+                capL[ns] = capR[ns] = 3 * U;        // noise grains may stretch to fill a junction
+                sGain[ns] = 1;
+                ns++;
+                double next = ts + U;
                 // entering a voiced part: land exactly on its first pulse
-                int q = k;
-                while (q < m.n && !m.voiced[q] && m.pos[q] * time < next + P) q++;
-                if (q < m.n && m.voiced[q] && m.pos[q] * time > ts + 1 && m.pos[q] * time < next + P * 0.5) next = m.pos[q] * time;
+                int q = Math.max(0, k - 1);
+                while (q < m.n && m.pos[q] * time <= ts + 1) q++;
+                while (q < m.n && !m.voiced[q] && m.pos[q] * time < next + U * 0.5) q++;
+                if (q < m.n && m.voiced[q] && m.pos[q] * time < next + U * 0.5) next = m.pos[q] * time;
                 ts = next;
             }
-            j++;
         }
-        // overlap gain: where grains pile up (higher pitch) divide by a smoothed window sum; never boost gaps
-        int sw = sr / 100;
-        double[] cs = new double[wsum.length + 1];
-        for (int i = 0; i < wsum.length; i++) cs[i + 1] = cs[i] + wsum[i];
+        if (System.getProperty("vsdbg") != null) for (int i = 0; i < ns; i++) if (Math.abs(sSrc[i] - sPos[i]) > 2) { System.out.println("drift at " + i + " pos " + sPos[i] + " src " + sSrc[i] + " capL " + capL[i] + " capR " + capR[i] + (i > 0 ? " prev " + sPos[i - 1] + "/" + sSrc[i - 1] : "")); break; }
+        // pass 2: overlap-add. At each junction between two synthesis marks (distance D) the outgoing and the
+        // incoming grain cross-fade over the same stretch of length J = min(D, reach of both); the rest of D is
+        // covered by flat window parts as far as each grain may reach. So the windows add up to exactly 1
+        // (no build-up when the pitch goes up, nothing changed at pitch 1 / time 1); only when the pitch goes far
+        // down and neither pulse may reach further is there a short quiet gap, as in a real low voice.
+        int[] rf = new int[ns], rj = new int[ns], lf = new int[ns], lj = new int[ns];
+        for (int i = 0; i < ns; i++) {
+            if (i == 0) { lf[i] = 0; lj[i] = capL[i]; }
+            if (i + 1 >= ns) { rf[i] = 0; rj[i] = capR[i]; continue; }
+            int D = (int) Math.round(sPos[i + 1]) - (int) Math.round(sPos[i]);
+            int J = Math.max(1, Math.min(D, Math.min(capR[i], capL[i + 1])));
+            int E = Math.max(0, D - J);
+            int fi = Math.min(E, Math.max(0, capR[i] - J));
+            int fn = Math.min(E - fi, Math.max(0, capL[i + 1] - J));
+            rf[i] = fi; rj[i] = J; lf[i + 1] = fn; lj[i + 1] = J;
+        }
+        double[] out = new double[L + sr / 10];
+        for (int i = 0; i < ns; i++)
+            grain(x, sSrc[i], lf[i], lj[i], rf[i], rj[i], out, (int) Math.round(sPos[i]), sGain[i]);
         float[] y = new float[L];
-        for (int i = 0; i < L; i++) {
-            int a = Math.max(0, i - sw), b = Math.min(wsum.length, i + sw + 1);
-            double avg = (cs[b] - cs[a]) / (b - a);
-            y[i] = (float) (out[i] / Math.max(1, avg));
-        }
+        for (int i = 0; i < L; i++) y[i] = (float) out[i];
         return y;
     }
 
-    /** Asymmetric Hann grain centred on input sample c, added at output position at. */
-    static void grain(float[] x, int c, int lh, int rh, double[] out, double[] wsum, int at, double gain) {
-        for (int d = -lh + 1; d < rh; d++) {
+    /** Marks k and k+1 are two pulses of the same voiced stretch. */
+    static boolean linked(Marks m, int k) {
+        return k >= 0 && k + 1 < m.n && m.voiced[k] && m.voiced[k + 1] && m.pos[k + 1] - m.pos[k] <= 2.5 * Math.min(m.period[k], m.period[k + 1]);
+    }
+
+    /** Grain centred on input sample c, added at output position at: flat parts lf / rf, raised-cosine fades lj / rj. */
+    static void grain(float[] x, int c, int lf, int lj, int rf, int rj, double[] out, int at, double gain) {
+        for (int d = -(lf + lj) + 1; d < rf + rj; d++) {
             int si = c + d, oi = at + d;
-            if (oi < 0 || oi >= out.length) continue;
-            double w = d < 0 ? 0.5 + 0.5 * Math.cos(Math.PI * d / lh) : 0.5 + 0.5 * Math.cos(Math.PI * d / rh);
-            wsum[oi] += w;
-            if (si < 0 || si >= x.length) continue;
+            if (oi < 0 || oi >= out.length || si < 0 || si >= x.length) continue;
+            double w;
+            if (d >= -lf && d <= rf) w = 1;
+            else if (d > rf) w = 0.5 + 0.5 * Math.cos(Math.PI * (d - rf) / rj);
+            else w = 0.5 + 0.5 * Math.cos(Math.PI * (-lf - d) / lj);
             out[oi] += x[si] * w * gain;
         }
     }
