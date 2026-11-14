@@ -515,8 +515,8 @@ public final class Voice {
     }
 
     // ================================================================ reverb (FDN)
-    /** 8-line feedback delay network reverb, ~1.4 s low / ~0.6 s high decay. mix 0..1. */
-    public static float[] reverb(float[] x, int sr, double mix) { return reverb(x, sr, mix, 1.4, 0.0); }
+    /** 8-line feedback delay network reverb (1.2 s low / 0.5 s high decay), ducked 60 % under the voice. mix 0..1. */
+    public static float[] reverb(float[] x, int sr, double mix) { return reverb(x, sr, mix, 1.2, 0.6); }
 
     /** rt60: low-frequency decay (s); duck: 0..1 how much the reverb is held down while the voice speaks. */
     public static float[] reverb(float[] x, int sr, double mix, double rt60, double duck) {
