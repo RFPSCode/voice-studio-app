@@ -1,0 +1,84 @@
+name: Model test (real Qwen3-TTS on CPU)
+
+# Manual check that the model files download and the example project sounds right.
+on:
+  workflow_dispatch:
+    inputs:
+      lines:
+        description: 'how many lines of the example project to synthesize'
+        default: '12'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check model URLs
+        run: |
+          python3 - <<'E'
+          import json, urllib.request
+          cat = json.load(open('android/app/src/main/assets/models.json'))
+          for m in cat['models']:
+              for f in m['files']:
+                  req = urllib.request.Request(f['url'], method='HEAD')
+                  try:
+                      with urllib.request.urlopen(req, timeout=60) as r:
+                          print('OK ', r.status, r.headers.get('content-length'), f['name'])
+                  except Exception as e:
+                      print('BAD', e, f['url'])
+          E
+          curl -s https://huggingface.co/api/models/Serveurperso/Qwen3-TTS-GGUF | python3 -c "import json,sys; d=json.load(sys.stdin); print('\n'.join(s['rfilename'] for s in d.get('siblings',[])))"
+      - name: Build qwentts.cpp (CPU)
+        run: |
+          bash scripts/fetch_deps.sh
+          cd android/third_party/qwentts.cpp && mkdir -p build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release > /dev/null && cmake --build . -j4 --target tts-server > /dev/null && ls -la tts-server
+      - name: Download model (Q8_0)
+        run: |
+          mkdir -p models && cd models
+          for f in $(python3 -c "import json;print(' '.join(x['url'] for x in json.load(open('../android/app/src/main/assets/models.json'))['models'][0]['files']))"); do curl -sSL -o "$(basename $f)" "$f"; done
+          ls -la
+      - name: Synthesize example lines
+        run: |
+          cd android/third_party/qwentts.cpp/build
+          ./tts-server --model ../../../../models/qwen-talker-1.7b-customvoice-Q8_0.gguf --codec ../../../../models/qwen-tokenizer-12hz-Q8_0.gguf --port 8080 --lang chinese > /tmp/server.log 2>&1 &
+          for i in $(seq 120); do curl -s localhost:8080/health && break; sleep 2; done
+          cd $GITHUB_WORKSPACE && mkdir -p out && python3 - "${{ github.event.inputs.lines }}" <<'E'
+          import json, sys, time, urllib.request
+          p = json.load(open('examples/校園安全時光機.voiceproj.json'))
+          roles = {r['id']: r for r in p['roles']}
+          log = []
+          for l in p['lines'][:int(sys.argv[1])]:
+              r = roles[l['role']]
+              ins = '；'.join(x for x in [p.get('instruct',''), r.get('instruct',''), l.get('instruct','')] if x)
+              body = {'input': l.get('say') or l['text'], 'voice': r['speaker'], 'language': 'chinese', 'instructions': ins, 'response_format': 'wav', 'temperature': 0.8}
+              t0 = time.time()
+              req = urllib.request.Request('http://localhost:8080/v1/audio/speech', data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
+              wav = urllib.request.urlopen(req, timeout=900).read()
+              dt = time.time() - t0
+              open('out/%s_%s.wav' % (l['id'], l['role']), 'wb').write(wav)
+              dur = (len(wav) - 44) / 48000
+              log.append({'id': l['id'], 'role': l['role'], 'text': l['text'], 'secs': round(dt, 1), 'dur': round(dur, 2), 'rtf': round(dt / max(dur, .1), 2)})
+              print(log[-1], flush=True)
+          json.dump(log, open('out/log.json', 'w'), ensure_ascii=False, indent=1)
+          E
+          tail -20 /tmp/server.log
+      - name: Transcribe (check the words)
+        run: |
+          pip install -q faster-whisper
+          python3 - <<'E'
+          import json, glob
+          from faster_whisper import WhisperModel
+          m = WhisperModel('small', device='cpu', compute_type='int8')
+          log = json.load(open('out/log.json'))
+          for e in log:
+              segs, _ = m.transcribe('out/%s_%s.wav' % (e['id'], e['role']), language='zh')
+              e['heard'] = ''.join(s.text for s in segs)
+              print(e['id'], e['text'], '=>', e['heard'], flush=True)
+          json.dump(log, open('out/log.json', 'w'), ensure_ascii=False, indent=1)
+          E
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-test
+          path: out/
