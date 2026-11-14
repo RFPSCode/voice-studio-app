@@ -16,5 +16,10 @@ public class DspAB{public static void main(String[] a)throws Exception{
    JSONObject post=roles.get(role).getJSONObject("post");float[] c=clean.get(f.getName());
    long t0=System.nanoTime();float[] o=Store.applyPostV1(c,post,base);long t1=System.nanoTime();float[] n=Store.applyPost(c,post,base);long t2=System.nanoTime();
    String b=f.getName().replace(".wav","");Store.writeWav(new File(a[2]+"/"+b+"_0clean.wav"),c);Store.writeWav(new File(a[2]+"/"+b+"_1old.wav"),o);Store.writeWav(new File(a[2]+"/"+b+"_2new.wav"),n);
+   double ratioP=Store.pitchRatio(c,post,base);double fm=post.optDouble("formant",1);
+   Store.writeWav(new File(a[2]+"/"+b+"_3pitch.wav"),Voice.finish(Voice.change(c,24000,ratioP,1,1,0),24000,-17,0.89f));
+   Store.writeWav(new File(a[2]+"/"+b+"_4form.wav"),Voice.finish(Voice.change(c,24000,1,fm,1,0),24000,-17,0.89f));
+   Store.writeWav(new File(a[2]+"/"+b+"_5ident.wav"),Voice.finish(Voice.psola(c,24000,1,1,0),24000,-17,0.89f));
+   try(java.io.PrintWriter w=new java.io.PrintWriter(a[2]+"/"+b+".json")){w.print(new JSONObject().put("ratio",ratioP).put("formant",fm).put("speed",post.optDouble("speed",1)).toString());}
    System.out.printf("%s base %.0f  old %.0f ms  new %.0f ms  f0 %.0f -> old %.0f new %.0f  len %.2f/%.2f/%.2f%n",b,base,(t1-t0)/1e6,(t2-t1)/1e6,Dsp.medianF0(c,24000),Dsp.medianF0(o,24000),Dsp.medianF0(n,24000),c.length/24000.,o.length/24000.,n.length/24000.);}
 }}

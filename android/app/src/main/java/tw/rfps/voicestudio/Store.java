@@ -542,6 +542,16 @@ public class Store {
      * pitch/formant/speed → octave layers → growl → bass/treble → loudness → echo → reverb.
      * baseF0 = the role's typical pitch; pitchLock 0 keeps each line's own pitch relative to it, 1 makes every line hit pitchHz.
      */
+    /** The pitch ratio applyPost uses for a line (target / role pitch with pitchLock), limited to 0.7..1.6. */
+    public static double pitchRatio(float[] a, JSONObject post, double baseF0) {
+        double target = num(post, "pitchHz", 0, 0, 500), lock = num(post, "pitchLock", 0.5, 0, 1);
+        double line = (target > 0 || lock > 0) ? Dsp.medianF0(a, SR) : 0;
+        double base = baseF0 > 0 ? baseF0 : line;
+        if (line <= 0) line = base;
+        double tgt = target > 0 ? target : base;
+        return base > 0 && tgt > 0 ? Math.max(0.7, Math.min(1.6, tgt / (Math.pow(base, 1 - lock) * Math.pow(line, lock)))) : 1;
+    }
+
     public static float[] applyPost(float[] a, JSONObject post, double baseF0) {
         if (post == null || !post.optBoolean("enabled")) return a;
         double target = num(post, "pitchHz", 0, 0, 500), lock = num(post, "pitchLock", 0.5, 0, 1);
