@@ -19,6 +19,16 @@ public class DspAB{public static void main(String[] a)throws Exception{
    double ratioP=Store.pitchRatio(c,post,base);double fm=post.optDouble("formant",1);
    Store.writeWav(new File(a[2]+"/"+b+"_3pitch.wav"),Voice.finish(Voice.change(c,24000,ratioP,1,1,0),24000,-17,0.89f));
    Store.writeWav(new File(a[2]+"/"+b+"_4form.wav"),Voice.finish(Voice.change(c,24000,1,fm,1,0),24000,-17,0.89f));
+   int SR=24000;String o2=a[2]+"/"+b;
+   Store.writeWav(new File(o2+"_8revO.wav"),Voice.finish(Dsp.reverb(c,SR,0.35),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_8revN.wav"),Voice.finish(Voice.reverb(c,SR,0.35),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_9echO.wav"),Voice.finish(Dsp.echo(c,SR,180,0.35,0.3),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_9echN.wav"),Voice.finish(Voice.echo(c,SR,180,0.35,0.3),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_AlayO.wav"),Voice.finish(Dsp.layer(c,SR,0.5,0.8,0.3),SR,-17,0.89f));
+   {float[] lo=Dsp.fit(Voice.change(c,SR,0.5,0.8,1,0),c.length);float[] z=new float[c.length];for(int i=0;i<z.length;i++)z[i]=c[i]+0.3f*lo[i];
+    Store.writeWav(new File(o2+"_AlayN.wav"),Voice.finish(z,SR,-17,0.89f));}
+   Store.writeWav(new File(o2+"_BgrlO.wav"),Voice.finish(Dsp.growl(c,SR,0.3),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_BgrlN.wav"),Voice.finish(Voice.change(c,SR,1,1,1,0.3),SR,-17,0.89f));
    Store.writeWav(new File(a[2]+"/"+b+"_7formRS.wav"),Voice.finish(Voice.psola(Voice.resample(c,fm),24000,1/fm,fm,0),24000,-17,0.89f));
    Store.writeWav(new File(a[2]+"/"+b+"_5ident.wav"),Voice.finish(Voice.psola(c,24000,1,1,0),24000,-17,0.89f));
    try(java.io.PrintWriter w=new java.io.PrintWriter(a[2]+"/"+b+".json")){w.print(new JSONObject().put("ratio",ratioP).put("formant",fm).put("speed",post.optDouble("speed",1)).toString());}
