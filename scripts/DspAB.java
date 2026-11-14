@@ -27,6 +27,9 @@ public class DspAB{public static void main(String[] a)throws Exception{
    int SR=24000;String o2=a[2]+"/"+b;
    Store.writeWav(new File(o2+"_8revO.wav"),Voice.finish(Dsp.reverb(c,SR,0.35),SR,-17,0.89f));
    Store.writeWav(new File(o2+"_8revN.wav"),Voice.finish(Voice.reverb(c,SR,0.35),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_8revD.wav"),Voice.finish(Voice.reverb(c,SR,0.35,1.4,0.5),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_8revS.wav"),Voice.finish(Voice.reverb(c,SR,0.35,0.9,0.5),SR,-17,0.89f));
+   Store.writeWav(new File(o2+"_8revL.wav"),Voice.finish(Voice.reverb(c,SR,0.35,1.4,0.75),SR,-17,0.89f));
    Store.writeWav(new File(o2+"_9echO.wav"),Voice.finish(Dsp.echo(c,SR,180,0.35,0.3),SR,-17,0.89f));
    Store.writeWav(new File(o2+"_9echN.wav"),Voice.finish(Voice.echoPlain(c,SR,180,0.35,0.3),SR,-17,0.89f));
    Store.writeWav(new File(o2+"_9echD.wav"),Voice.finish(Voice.echo(c,SR,180,0.35,0.3),SR,-17,0.89f));
