@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>語音專案編輯器｜語音工作室</title>
+<style>
+:root{--navy:#1d2466;--org:#ff8424;--yel:#ffd23f;--bg:#f4f1fb;--card:#fffdf8;--line:#e2dcef;--ink:#2b2140;--muted:#7a7396}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif}
+header{background:linear-gradient(#2c35a0,var(--navy));color:#fff;padding:12px 20px;border-bottom:4px solid var(--yel);display:flex;gap:14px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:21px;letter-spacing:1px}header h1 small{font-size:13px;opacity:.8;margin-left:6px;letter-spacing:0}
+header .sp{flex:1}
+main{max-width:1250px;margin:16px auto;padding:0 14px 60px}
+.card{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:14px}
+h2{margin:0 0 10px;font-size:18px;color:var(--navy);display:flex;gap:10px;align-items:center}
+.hint{font-size:13.5px;color:var(--muted);line-height:1.6}
+.b{white-space:nowrap;border:2px solid #7a2a00;background:linear-gradient(#ffc04f,#ff7a1f);color:#fff;font-weight:900;border-radius:11px;padding:7px 14px;font-size:14.5px;cursor:pointer;font-family:inherit;box-shadow:0 3px 0 #7a2a00}
+.b.blue{border-color:#12357a;background:linear-gradient(#6cc0ff,#1f66c9);box-shadow:0 3px 0 #12357a}
+.b.green{border-color:#16592a;background:linear-gradient(#8be07a,#27963f);box-shadow:0 3px 0 #16592a}
+.b.gray{border-color:#4a5168;background:linear-gradient(#c3c9d8,#7d879e);box-shadow:0 3px 0 #4a5168}
+.b.sm{padding:3px 9px;font-size:13px;border-radius:8px;box-shadow:0 2px 0 #4a5168}
+input,select,textarea{font-family:inherit;font-size:14px;border:2px solid var(--line);border-radius:9px;padding:5px 8px;background:#fff;width:100%}
+textarea{resize:vertical;min-height:34px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+label.f{font-size:13px;color:var(--muted);display:block}
+table{border-collapse:collapse;width:100%}
+th,td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px;text-align:left}
+th{background:#eeeaf8;color:var(--navy);font-size:13px;position:sticky;top:64px}
+td.n{width:34px;color:var(--muted);font-size:12px}
+.err{background:#ffe9ec;border:2px solid #f5a3b0;border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+.ok{background:#e3f6e7;border:2px solid #9fd8ab;border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mini{font-size:12px;color:var(--muted)}
+.row.mini{white-space:nowrap;gap:4px}.row.mini input{width:72px}
+code{background:#eeeaf8;border-radius:5px;padding:1px 5px}
+</style>
+</head>
+<body>
+<header><h1>🎙 語音專案編輯器<small>產生手機「語音工作室」App 的專案檔（規格 v1）</small></h1><span class="sp"></span>
+ <button class="b gray" onclick="newProj()">新專案</button>
+ <button class="b blue" onclick="$('#fOpen').click()">開啟專案檔</button>
+ <button class="b gray" onclick="$('#fOld').click()" title="script.json、voices.json、發音修正.json">從舊版語音工具匯入</button>
+ <button class="b green" onclick="download()">⬇ 下載專案檔</button>
+ <input type="file" id="fOpen" accept=".json" style="display:none"><input type="file" id="fOld" accept=".json" multiple style="display:none">
+</header>
+<main>
+ <div id="val"></div>
+ <div class="card">
+  <h2>專案</h2>
+  <div class="grid">
+   <div><label class="f">專案代號 id（小寫英數和 -，同一個程式永遠不要改）</label><input id="pid"></div>
+   <div><label class="f">名稱 title</label><input id="ptitle"></div>
+   <div><label class="f">語言</label><select id="plang"><option value="chinese">中文 chinese</option><option value="english">英文 english</option><option value="japanese">日文 japanese</option><option value="korean">韓文 korean</option><option value="auto">自動 auto</option></select></div>
+   <div><label class="f">變化程度 temperature（0.8 建議）</label><input id="ptemp" type="number" step="0.05" min="0" max="1.5"></div>
+  </div>
+  <div style="margin-top:8px"><label class="f">說明 description</label><input id="pdesc"></div>
+  <div style="margin-top:8px"><label class="f">全部句子共用的指令 instruct</label><input id="pins" placeholder="用台灣口音的國語說話，咬字清楚自然"></div>
+  <div class="grid" style="margin-top:8px">
+   <div><label class="f">MP3 位元率 kbps</label><select id="okbps"><option>48</option><option>64</option><option>80</option><option>96</option></select></div>
+   <div><label class="f">開頭空白秒數</label><input id="olead" type="number" step="0.1" min="0"></div>
+   <div><label class="f">句間空白秒數</label><input id="ogap" type="number" step="0.1" min="0.1"></div>
+   <div><label class="f">key 格式（遊戲查詢鍵）</label><input id="okey" placeholder="{role}|{text}"></div>
+  </div>
+ </div>
+
+ <div class="card">
+  <h2>角色 <span class="mini" id="roleCount"></span><span style="flex:1"></span><button class="b sm gray" onclick="addRole()">＋ 角色</button></h2>
+  <div class="hint">模型有 9 個內建音色，沒有小孩的聲音：小孩角色用 vivian／aiden，在指令寫年齡，再開「兒童後製」。角色可以共用音色，用指令和後製參數區分。</div>
+  <table><thead><tr><th>代號 id</th><th>名稱</th><th>音色</th><th style="width:30%">角色固定的說話方式 instruct</th><th>兒童後製</th><th></th></tr></thead><tbody id="roles"></tbody></table>
+ </div>
+
+ <div class="card">
+  <h2>台詞 <span class="mini" id="lineCount"></span><span style="flex:1"></span>
+   <select id="fRole" style="width:auto"><option value="">全部角色</option></select>
+   <button class="b sm gray" onclick="addLine()">＋ 台詞</button></h2>
+  <div class="hint">「唸法」只有和台詞不同時才填（數字改中文、多音字改同音字）。「情緒指令」用簡短中文，例如「痛得哭出來，聲音發抖」。不要在文字裡放 &lt;laugh&gt; 這類標記。</div>
+  <table><thead><tr><th>#</th><th>id</th><th>角色</th><th style="width:26%">台詞 text</th><th style="width:20%">唸法 say</th><th style="width:20%">情緒指令 instruct</th><th>備註</th><th></th></tr></thead><tbody id="lines"></tbody></table>
+  <datalist id="insList"></datalist>
+ </div>
+
+ <div class="card">
+  <h2>發音修正<span style="flex:1"></span><button class="b sm gray" onclick="P.pronunciation.push({from:'',to:''});renderPron()">＋ 一行</button></h2>
+  <div class="hint">每一句要唸的文字裡，把左邊換成右邊（同音字），只影響語音、不影響畫面。</div>
+  <table><tbody id="pron"></tbody></table>
+ </div>
+ <div class="card hint">規格書：<code>docs/語音專案規格書.md</code>。產生好的 <code>.voiceproj.json</code> 用 LINE／雲端硬碟／USB 傳到手機，在「語音工作室」App 按「匯入專案檔」。</div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const SPK=[['vivian','Vivian 明亮年輕女聲'],['serena','Serena 溫柔年輕女聲'],['uncle_fu','Uncle Fu 成熟低沉男聲'],['aiden','Aiden 陽光年輕男聲'],['ryan','Ryan 有活力的男聲'],['dylan','Dylan（北京腔）'],['eric','Eric（四川腔）'],['ono_anna','Ono Anna 日文女聲'],['sohee','Sohee 韓文女聲']];
+const PRE={'不處理':null,'8歲男孩':[290,1.20],'8歲女孩':[310,1.22],'11歲男孩':[240,1.14],'11歲女孩':[265,1.14],'小天使':[300,1.10]};
+const INS=['開心、語氣輕快','溫柔、親切','語氣嚴肅、沉穩','緊張、語速稍快','很擔心','很害怕，聲音發抖','痛得哭出來，聲音發抖','小聲啜泣','很內疚，快要哭出來','誠懇地道歉','興奮地大聲喊','驚慌地尖叫','堅定有力','調皮地逗弄人','壓低聲音，狡猾地慫恿','得意洋洋','嘲笑、挖苦','邪惡地哈哈大笑','驚訝','小聲說悄悄話','一開始帶著笑聲','中間先嘆一口氣','倒抽一口氣'];
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let P;
+function blank(){return {format:'voice-studio-project',version:1,id:'my-game',title:'我的遊戲',description:'',updated:'',engine:{model:'qwen3-tts-customvoice',language:'chinese',temperature:0.8},
+ instruct:'用台灣口音的國語說話，咬字清楚自然',pronunciation:[],roles:[{id:'nar',name:'旁白',speaker:'serena',instruct:'溫柔的說故事姊姊',post:{enabled:false,pitchHz:0,formant:1,speed:1}}],
+ lines:[{id:'001',role:'nar',text:'大家好，歡迎來到我的遊戲。'}],output:{type:'game-voice-v1',sampleRate:24000,mp3Kbps:64,leadSec:0.5,gapSec:0.4,keyFormat:'{role}|{text}'}};}
+function newProj(){if(P&&!confirm('開新專案？目前沒下載的修改會不見。'))return;P=blank();renderAll();}
+function save(){try{localStorage.setItem('vsp_editor',JSON.stringify(P));}catch(e){}}
+function bindTop(){
+ const map=[['#pid','id'],['#ptitle','title'],['#pdesc','description'],['#pins','instruct']];
+ map.forEach(([s,k])=>{$(s).value=P[k]||'';$(s).oninput=e=>{P[k]=e.target.value;validate();};});
+ P.engine=P.engine||{};P.output=P.output||{};
+ $('#plang').value=P.engine.language||'chinese';$('#plang').onchange=e=>{P.engine.language=e.target.value;validate();};
+ $('#ptemp').value=P.engine.temperature??0.8;$('#ptemp').oninput=e=>{P.engine.temperature=+e.target.value;validate();};
+ $('#okbps').value=String(P.output.mp3Kbps||64);$('#okbps').onchange=e=>{P.output.mp3Kbps=+e.target.value;validate();};
+ $('#olead').value=P.output.leadSec??0.5;$('#olead').oninput=e=>{P.output.leadSec=+e.target.value;validate();};
+ $('#ogap').value=P.output.gapSec??0.4;$('#ogap').oninput=e=>{P.output.gapSec=+e.target.value;validate();};
+ $('#okey').value=P.output.keyFormat||'{role}|{text}';$('#okey').oninput=e=>{P.output.keyFormat=e.target.value;validate();};
+}
+function renderRoles(){
+ $('#roleCount').textContent=P.roles.length+' 個';
+ $('#roles').innerHTML=P.roles.map((r,i)=>{const p=r.post||{};return `<tr>
+  <td><input value="${esc(r.id)}" data-i="${i}" data-k="id"></td><td><input value="${esc(r.name)}" data-i="${i}" data-k="name"></td>
+  <td><select data-i="${i}" data-k="speaker">${SPK.map(([v,n])=>`<option value="${v}" ${v===r.speaker?'selected':''}>${n}</option>`).join('')}</select></td>
+  <td><textarea data-i="${i}" data-k="instruct" rows="1">${esc(r.instruct)}</textarea></td>
+  <td style="min-width:250px"><div class="row"><label class="row" style="gap:4px;width:auto"><input type="checkbox" style="width:auto" data-i="${i}" data-pk="enabled" ${p.enabled?'checked':''}>開</label>
+   <select style="width:auto" data-i="${i}" data-pre>${Object.keys(PRE).map(k=>`<option>${k}</option>`).join('')}<option selected value="">預設…</option></select></div>
+   <div class="row mini" style="flex-wrap:nowrap;margin-top:4px">音高<input type="number" step="5" data-i="${i}" data-pk="pitchHz" value="${p.pitchHz??0}">共振峰<input type="number" step="0.01" data-i="${i}" data-pk="formant" value="${p.formant??1}">語速<input type="number" step="0.01" data-i="${i}" data-pk="speed" value="${p.speed??1}"></div></td>
+  <td><button class="b sm gray" onclick="delRole(${i})">✕</button></td></tr>`;}).join('');
+ $('#roles').querySelectorAll('[data-k]').forEach(el=>el.oninput=el.onchange=e=>{const r=P.roles[+el.dataset.i],old=r.id;r[el.dataset.k]=el.value;
+  if(el.dataset.k==='id'&&old!==el.value)P.lines.forEach(l=>{if(l.role===old)l.role=el.value;});if(el.dataset.k!=='instruct')renderLines();validate();});
+ $('#roles').querySelectorAll('[data-pk]').forEach(el=>el.oninput=el.onchange=()=>{const r=P.roles[+el.dataset.i];r.post=r.post||{enabled:false,pitchHz:0,formant:1,speed:1};
+  r.post[el.dataset.pk]=el.type==='checkbox'?el.checked:+el.value;validate();});
+ $('#roles').querySelectorAll('[data-pre]').forEach(el=>el.onchange=()=>{const r=P.roles[+el.dataset.i],v=PRE[el.value];if(el.value==='')return;
+  r.post=v?{enabled:true,pitchHz:v[0],formant:v[1],speed:1}:{enabled:false,pitchHz:0,formant:1,speed:1};renderRoles();validate();});
+ const fr=$('#fRole'),cur=fr.value;fr.innerHTML='<option value="">全部角色</option>'+P.roles.map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');fr.value=cur;
+}
+function addRole(){let n=P.roles.length+1;while(P.roles.some(r=>r.id==='role'+n))n++;P.roles.push({id:'role'+n,name:'新角色',speaker:'vivian',instruct:'',post:{enabled:false,pitchHz:0,formant:1,speed:1}});renderRoles();renderLines();validate();}
+function delRole(i){const id=P.roles[i].id;if(P.lines.some(l=>l.role===id)&&!confirm('還有台詞用這個角色，確定刪除？'))return;P.roles.splice(i,1);renderRoles();renderLines();validate();}
+function renderLines(){
+ const f=$('#fRole').value;$('#lineCount').textContent=P.lines.length+' 句';
+ $('#insList').innerHTML=INS.map(s=>`<option value="${s}">`).join('');
+ $('#lines').innerHTML=P.lines.map((l,i)=>f&&l.role!==f?'':`<tr>
+  <td class="n">${i+1}</td><td style="width:80px"><input value="${esc(l.id)}" data-i="${i}" data-k="id"></td>
+  <td style="width:130px"><select data-i="${i}" data-k="role">${P.roles.map(r=>`<option value="${esc(r.id)}" ${r.id===l.role?'selected':''}>${esc(r.name)}</option>`).join('')}</select></td>
+  <td><textarea data-i="${i}" data-k="text" rows="1">${esc(l.text)}</textarea></td>
+  <td><textarea data-i="${i}" data-k="say" rows="1" placeholder="（和台詞相同）">${esc(l.say)}</textarea></td>
+  <td><input list="insList" data-i="${i}" data-k="instruct" value="${esc(l.instruct)}"></td>
+  <td><input data-i="${i}" data-k="note" value="${esc(l.note)}"></td>
+  <td style="white-space:nowrap"><button class="b sm gray" onclick="mv(${i},-1)">↑</button><button class="b sm gray" onclick="mv(${i},1)">↓</button><button class="b sm gray" onclick="delLine(${i})">✕</button></td></tr>`).join('');
+ $('#lines').querySelectorAll('[data-k]').forEach(el=>el.oninput=el.onchange=()=>{const l=P.lines[+el.dataset.i];const v=el.value;if(v===''&&['say','instruct','note'].includes(el.dataset.k))delete l[el.dataset.k];else l[el.dataset.k]=v;validate();});
+}
+$('#fRole').onchange=renderLines;
+function addLine(){const f=$('#fRole').value||(P.roles[0]||{}).id;let n=P.lines.length+1,id=String(n).padStart(3,'0');while(P.lines.some(l=>l.id===id)){n++;id=String(n).padStart(3,'0');}P.lines.push({id,role:f,text:''});renderLines();validate();}
+function delLine(i){P.lines.splice(i,1);renderLines();validate();}
+function mv(i,d){const j=i+d;if(j<0||j>=P.lines.length)return;[P.lines[i],P.lines[j]]=[P.lines[j],P.lines[i]];renderLines();validate();}
+function renderPron(){P.pronunciation=P.pronunciation||[];$('#pron').innerHTML=P.pronunciation.map((e,i)=>`<tr><td><input value="${esc(e.from)}" data-i="${i}" data-k="from" placeholder="原本的詞"></td><td style="width:30px">→</td><td><input value="${esc(e.to)}" data-i="${i}" data-k="to" placeholder="同音字寫法"></td><td style="width:40px"><button class="b sm gray" onclick="P.pronunciation.splice(${i},1);renderPron();validate()">✕</button></td></tr>`).join('');
+ $('#pron').querySelectorAll('[data-k]').forEach(el=>el.oninput=()=>{P.pronunciation[+el.dataset.i][el.dataset.k]=el.value;validate();});}
+function sayOf(l){let s=(l.say&&l.say.trim())?l.say:l.text||'';(P.pronunciation||[]).forEach(e=>{if(e.from)s=s.split(e.from).join(e.to||'');});return s.trim();}
+function keyOf(l){if(l.key)return l.key;return ((P.output||{}).keyFormat||'{role}|{text}').replace('{role}',l.role).replace('{text}',l.text).replace('{id}',l.id);}
+// same rules as the App (Store.validate) and docs §5
+function validate(){
+ const E=[],W=[];
+ if(!/^[a-z0-9][a-z0-9-]{1,63}$/.test(P.id||''))E.push('專案 id 只能用小寫英數和 -（2–64 字）');
+ if(!(P.title||'').trim())E.push('缺少名稱 title');
+ if(!P.roles.length)E.push('至少要一個角色');if(!P.lines.length)E.push('至少要一句台詞');
+ const rid={};P.roles.forEach(r=>{if(!/^[A-Za-z0-9_-]{1,40}$/.test(r.id))E.push('角色 id 格式不對：'+r.id);if(rid[r.id])E.push('角色 id 重複：'+r.id);rid[r.id]=1;
+  const p=r.post||{};if(p.enabled){if(p.pitchHz&&(p.pitchHz<100||p.pitchHz>500))E.push(r.name+' 的音高超出範圍 100–500');if(p.formant<0.8||p.formant>1.4)E.push(r.name+' 的共振峰超出範圍 0.8–1.4');if(p.speed<0.7||p.speed>1.3)E.push(r.name+' 的語速超出範圍 0.7–1.3');}
+  if(r.speaker==='dylan'||r.speaker==='eric')W.push(r.name+' 用的音色會帶北京／四川腔');});
+ const lid={},keys={};P.lines.forEach((l,i)=>{const n='第 '+(i+1)+' 句';
+  if(!/^[A-Za-z0-9_-]{1,40}$/.test(l.id||''))E.push(n+' 的 id 格式不對');if(lid[l.id])E.push(n+' 的 id 重複：'+l.id);lid[l.id]=1;
+  if(!rid[l.role])E.push(n+' 的角色不存在：'+l.role);if(!(l.text||'').trim())E.push(n+' 的台詞是空的');if((l.text||'').length>300)E.push(n+' 太長');
+  const s=sayOf(l);if(/[<\[][^>\]]{1,20}[>\]]/.test(s))E.push(n+' 的文字裡有 <…> 或 […] 標記');
+  if(/\d/.test(s))W.push(n+' 有阿拉伯數字，建議在唸法寫成中文：'+s.slice(0,20));
+  if(s.length>80)W.push(n+' 超過 80 字，建議拆成兩句');
+  const k=keyOf(l);if(keys[k]&&!(keys[k].role===l.role&&sayOf(keys[k])===s))E.push(n+' 的 key 和 '+keys[k].id+' 重複');keys[k]=l;});
+ $('#val').innerHTML=(E.length?`<div class="err"><b>⚠ ${E.length} 個錯誤（要修正才能匯入 App）</b><br>${E.slice(0,15).map(esc).join('<br>')}${E.length>15?'<br>…':''}</div>`:`<div class="ok">✓ 格式正確：${P.roles.length} 個角色、${P.lines.length} 句。</div>`)
+  +(W.length?`<div class="err" style="background:#fff6dc;border-color:#ffd27a"><b>建議</b>（不影響匯入）<br>${W.slice(0,10).map(esc).join('<br>')}${W.length>10?'<br>…':''}</div>`:'');
+ save();return E;
+}
+function renderAll(){bindTop();renderRoles();renderLines();renderPron();validate();}
+function download(){const E=validate();if(E.length&&!confirm('還有錯誤，App 會拒絕匯入。仍要下載？'))return;
+ P.updated=new Date().toISOString();const out=JSON.parse(JSON.stringify(P));
+ const blob=new Blob([JSON.stringify(out,null,1)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(P.id||'project')+'.voiceproj.json';a.click();}
+$('#fOpen').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const p=JSON.parse((await f.text()).replace(/^﻿/,''));if(p.format!=='voice-studio-project')throw new Error('不是語音專案檔');P=Object.assign(blank(),p);renderAll();}catch(err){alert('開啟失敗：'+err.message);}e.target.value='';};
+// old tool (Gemini 語音工具): script.json + voices.json (+ 發音修正.json)
+const ZH={'sly whisper':'壓低聲音，狡猾地慫恿','serious':'語氣嚴肅、沉穩','cheerful':'開心、語氣輕快','gentle':'溫柔、親切','guilty, close to tears':'很內疚，快要哭出來','tense':'緊張、語速稍快','crying in pain':'痛得哭出來，聲音發抖','worried':'很擔心','smug':'得意洋洋','teasing':'調皮地逗弄人','cackling':'邪惡地哈哈大笑','excited, shouting':'興奮地大聲喊','apologetic':'誠懇地道歉','mocking':'嘲笑、挖苦','firm':'堅定有力','screaming':'驚慌地尖叫','crying softly':'小聲啜泣','whispering':'小聲說悄悄話','surprised':'驚訝','scared':'很害怕，聲音發抖'};
+const TAGI={'<laugh>':'一開始帶著笑聲','<sigh>':'中間先嘆一口氣','<gasp>':'倒抽一口氣'};
+$('#fOld').onchange=async e=>{let script=null,voices=null,fix=null;
+ for(const f of e.target.files){const j=JSON.parse((await f.text()).replace(/^﻿/,''));if(Array.isArray(j))script=j;else if(j.roles)voices=j;else if(j['替換'])fix=j;}
+ e.target.value='';if(!script){alert('請至少選 script.json（可以同時選 voices.json、發音修正.json）');return;}
+ const p=blank();p.id='imported-project';p.title='匯入的專案';p.roles=[];p.lines=[];
+ const roleIds=[...new Set(script.map(l=>l['角色']))];
+ roleIds.forEach(id=>{const v=voices&&voices.roles[id]||{};const post=v['兒童後製']||{};const female=v['性別']==='female';
+  p.roles.push({id,name:v['名稱']||id,speaker:post['啟用']?(female?'vivian':'aiden'):(female?'serena':'uncle_fu'),instruct:'',post:post['啟用']?{enabled:true,pitchHz:post['音高Hz']||0,formant:post['共振峰']||1,speed:post['語速']||1}:{enabled:false,pitchHz:0,formant:1,speed:1}});});
+ script.forEach(l=>{let say=l['唸法']||l['台詞'];const hints=(say.match(/<(laugh|sigh|gasp)>/g)||[]).map(t=>TAGI[t]);
+  say=say.replace(/\s*<short pause>\s*/g,'，').replace(/\s*<long pause>\s*/g,'……').replace(/\s*<[^>]+>\s*/g,'').replace(/，+/g,'，').replace(/([！。…])，/g,'$1').trim();
+  const st=(l['語氣']||'').trim();const ins=[ZH[st]||st,...hints].filter(Boolean).join('；');
+  const o={id:String(l['編號']).padStart(3,'0'),role:l['角色'],text:l['台詞']};if(say!==l['台詞'])o.say=say;if(ins)o.instruct=ins;p.lines.push(o);});
+ if(fix)p.pronunciation=Object.entries(fix['替換']||{}).map(([from,to])=>({from,to}));
+ P=p;renderAll();alert('已匯入 '+p.lines.length+' 句、'+p.roles.length+' 個角色。請檢查專案 id、名稱和每個角色的音色。');};
+try{P=JSON.parse(localStorage.getItem('vsp_editor'))||blank();}catch(e){P=blank();}
+renderAll();
+</script>
+</body>
+</html>

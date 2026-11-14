@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>語音工作室</title>
+<style>
+:root{--navy:#1d2466;--org:#ff8424;--yel:#ffd23f;--bg:#f4f1fb;--card:#fffdf8;--line:#e2dcef;--ink:#2b2140;--muted:#7a7396;--green:#2a9d4b;--red:#d8344a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:16px}
+header{position:sticky;top:0;z-index:5;background:linear-gradient(#2c35a0,var(--navy));color:#fff;border-bottom:3px solid var(--yel)}
+header .t{display:flex;align-items:center;gap:8px;padding:10px 14px 4px;font-weight:900;font-size:19px;letter-spacing:1px}
+header .t small{font-weight:400;font-size:12px;opacity:.75;letter-spacing:0;margin-left:auto;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+nav{display:flex;gap:4px;padding:4px 8px 8px;overflow-x:auto}
+nav button{flex:1;min-width:64px;border:2px solid rgba(255,255,255,.45);background:transparent;color:#fff;border-radius:999px;padding:6px 6px;font-size:15px;font-weight:700;font-family:inherit}
+nav button.on{background:var(--yel);border-color:var(--yel);color:var(--navy)}
+nav button:disabled{opacity:.35}
+main{padding:12px 10px 150px}
+.card{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:12px;box-shadow:0 2px 0 rgba(29,36,102,.07)}
+h2{margin:0 0 8px;font-size:18px;color:var(--navy)}
+h3{margin:0 0 6px;font-size:16px;color:var(--navy)}
+.hint{font-size:13.5px;color:var(--muted);line-height:1.6}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.b{white-space:nowrap;border:2px solid #7a2a00;background:linear-gradient(#ffc04f,#ff7a1f);color:#fff;font-weight:900;border-radius:12px;padding:9px 14px;font-size:15px;font-family:inherit;text-shadow:0 1px 0 rgba(120,40,0,.45);box-shadow:0 3px 0 #7a2a00}
+.b:active{transform:translateY(2px);box-shadow:0 1px 0 #7a2a00}
+.b.blue{border-color:#12357a;background:linear-gradient(#6cc0ff,#1f66c9);box-shadow:0 3px 0 #12357a}
+.b.green{border-color:#16592a;background:linear-gradient(#8be07a,#27963f);box-shadow:0 3px 0 #16592a}
+.b.gray{border-color:#4a5168;background:linear-gradient(#c3c9d8,#7d879e);box-shadow:0 3px 0 #4a5168}
+.b.red{border-color:#7a1026;background:linear-gradient(#ff7b8a,#d8344a);box-shadow:0 3px 0 #7a1026}
+.b.sm{padding:5px 10px;font-size:13.5px;border-radius:9px}
+.b:disabled{opacity:.45}
+.b.wide{width:100%}
+input[type=text],input[type=url],select{font-family:inherit;font-size:15px;border:2px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff;width:100%}
+.badge{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.s-todo{background:#ffe3e7;color:#b0213a}.s-done{background:#ddf5e2;color:#1d7a35}.s-changed{background:#fff0c2;color:#8a6200}.s-run{background:#dbe8ff;color:#1f4fb0}
+.bar{height:10px;border-radius:999px;background:#e5e1f3;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--yel),var(--org));width:0;transition:width .3s}
+.line{padding:10px 12px}
+.line .top{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.line .who{font-weight:700;color:var(--navy);font-size:14px}
+.line .id{font-size:12px;color:var(--muted)}
+.line .tx{font-size:16px;line-height:1.5}
+.line .say{font-size:13px;color:#8a5a00;margin-top:2px}
+.line .ins{font-size:13px;color:var(--muted);margin-top:2px}
+.takes{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tk{border:2px solid var(--line);background:#fff;border-radius:10px;padding:4px 9px;font-size:13.5px;font-family:inherit}
+.tk.on{border-color:var(--org);background:#fff1e0;color:#c45200;font-weight:700}
+.tk.odd{border-style:dashed}
+.filters{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}
+.filters button{border:2px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:14px;font-family:inherit;white-space:nowrap}
+.filters button.on{border-color:var(--navy);background:var(--navy);color:#fff}
+.sl{display:grid;grid-template-columns:72px 1fr 62px;gap:8px;align-items:center;margin:8px 0;font-size:14px}
+.sl input{width:100%}
+.sl b{text-align:right;font-variant-numeric:tabular-nums}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.presets button{border:2px solid var(--line);background:#fff;border-radius:999px;padding:4px 10px;font-size:13px;font-family:inherit}
+.fx{background:#f6f3ff;border:2px dashed #cfc6ef;border-radius:12px;padding:10px;margin-top:8px}
+.fx.on{background:#fff7ea;border-color:#ffc06b}
+#dock{position:fixed;left:0;right:0;bottom:0;background:#14163a;color:#e8e6ff;border-top:3px solid var(--yel);z-index:9;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+#dock .r{display:flex;gap:10px;align-items:center}
+#dock .r b{font-size:14px;white-space:nowrap}
+#dock .bar{flex:1;background:#2d3170}
+#dock .msg{font-size:13px;color:#c9c6f0;margin-top:5px;max-height:3.2em;overflow:hidden;line-height:1.6}
+.hide{display:none!important}
+.pj{display:flex;gap:10px;align-items:center}
+.pj .info{flex:1;min-width:0}
+.pj .ttl{font-weight:900;font-size:17px;color:var(--navy)}
+.empty{text-align:center;padding:26px 10px;color:var(--muted)}
+.mrow{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+pre{white-space:pre-wrap;font-size:11.5px;background:#1b1d3a;color:#d6d4ff;border-radius:10px;padding:8px;max-height:240px;overflow:auto}
+</style>
+</head>
+<body>
+<header>
+ <div class="t">🎙 語音工作室<small id="hdrProj"></small></div>
+ <nav><button data-t="proj" class="on">專案</button><button data-t="rec">錄音</button><button data-t="role">角色</button><button data-t="model">模型</button></nav>
+</header>
+<main>
+<!-- ================= 專案 ================= -->
+<section id="t-proj">
+ <div class="card" id="needModel">
+  <h2>第一步：下載模型</h2>
+  <div class="hint">這個 App 用 Qwen3-TTS 模型在手機上離線產生語音。模型約 2 GB，只要下載一次，建議連 Wi-Fi。</div>
+  <div class="row" style="margin-top:8px"><button class="b blue" onclick="tab('model')">前往「模型」分頁</button></div>
+ </div>
+ <div class="card">
+  <h2>語音專案</h2>
+  <div id="projList"></div>
+  <div class="row" style="margin-top:10px"><button class="b wide" onclick="VS.pickProject()">＋ 匯入專案檔（.voiceproj.json）</button></div>
+  <div class="mrow">
+   <div class="hint">或貼上專案檔的網址（例如 GitHub 上的檔案連結）：</div>
+   <div class="row" style="margin-top:6px;flex-wrap:nowrap"><input type="url" id="url" placeholder="https://…voiceproj.json"><button class="b sm blue" onclick="importUrl()">匯入</button></div>
+  </div>
+ </div>
+ <div class="card hint">
+  專案檔在電腦上產生（遊戲程式或「語音專案編輯器」），用 LINE、雲端硬碟或 USB 傳到手機，再按上面的「匯入」。
+  同一個專案再次匯入時，只有改過的句子需要重錄。
+ </div>
+</section>
+
+<!-- ================= 錄音 ================= -->
+<section id="t-rec" class="hide">
+ <div class="card">
+  <h2 id="recTitle"></h2>
+  <div class="row" style="justify-content:space-between"><span id="recStat"></span><span class="hint" id="recSpeed"></span></div>
+  <div class="bar" style="margin:8px 0"><i id="recBar"></i></div>
+  <div class="row">
+   <button class="b" id="btnGen" onclick="genAll()">▶ 產生未完成的句子</button>
+   <button class="b red" onclick="VS.cancel()">■ 停止</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+   <button class="b green" onclick="VS.export(P,false)">⬇ 匯出到下載資料夾</button>
+   <button class="b gray" onclick="VS.export(P,true)">↗ 分享</button>
+  </div>
+  <div class="hint" style="margin-top:8px">匯出檔案：手機的「Download/語音工作室/<span class="pid"></span>/」裡的 all.txt 和 map.txt，放進遊戲的 voice/ 資料夾或用遊戲的「匯入語音」。</div>
+ </div>
+ <div class="filters" id="filters">
+  <button data-f="" class="on">全部</button><button data-f="todo">未錄</button><button data-f="changed">已修改</button><button data-f="odd">可能有問題</button><button data-f="done">完成</button>
+ </div>
+ <div id="lines"></div>
+</section>
+
+<!-- ================= 角色 ================= -->
+<section id="t-role" class="hide">
+ <div class="card hint">
+  <b>兒童音色後製</b>：模型沒有小孩的聲音，所以小孩角色用年輕的聲音錄，再在手機上調高<b>音高</b>和<b>共振峰</b>變成小孩。
+  音高是這個角色的平均音高（8 歲約 280–320 Hz、11 歲約 230–270 Hz）；共振峰 1.15–1.25 最像小孩，只調音高會像卡通鼠聲。
+  在這裡調整會覆蓋專案檔的設定，不用重錄、不用網路。
+ </div>
+ <div id="roles"></div>
+</section>
+
+<!-- ================= 模型 ================= -->
+<section id="t-model" class="hide">
+ <div class="card">
+  <h2>語音模型</h2>
+  <div id="models"></div>
+  <div class="mrow">
+   <div class="hint">下載很慢或失敗時，可以填鏡像網站（例如 https://hf-mirror.com），或先用電腦下載模型檔（.gguf）再傳到手機，按「從手機檔案匯入」。</div>
+   <div class="row" style="margin-top:6px;flex-wrap:nowrap"><input type="url" id="mirror" placeholder="鏡像網站（可不填）"><button class="b sm gray" onclick="VS.setMirror(document.getElementById('mirror').value);toast('已儲存')">儲存</button></div>
+   <div class="row" style="margin-top:8px"><button class="b sm gray" onclick="VS.pickModelFile()">從手機檔案匯入模型檔</button></div>
+  </div>
+ </div>
+ <div class="card">
+  <h3>關於</h3>
+  <div class="hint" id="about"></div>
+  <div class="row" style="margin-top:8px"><button class="b sm gray" onclick="showLog()">顯示引擎紀錄</button></div>
+  <pre id="nlog" class="hide"></pre>
+ </div>
+</section>
+</main>
+
+<div id="dock"><div class="r"><b id="dName">待命中</b><div class="bar"><i id="dBar"></i></div><button class="b sm red hide" id="dStop" onclick="VS.cancel()">停止</button></div><div class="msg" id="dMsg">　</div></div>
+<audio id="aud"></audio>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let INFO=null,P=localStorage.getItem('vs_p')||'',S=null,FILT='',RUN={},cur='proj';
+const SPK={vivian:'Vivian 明亮年輕女聲',serena:'Serena 溫柔年輕女聲',uncle_fu:'Uncle Fu 成熟低沉男聲',dylan:'Dylan 年輕男聲（北京腔）',eric:'Eric 活潑男聲（四川腔）',ryan:'Ryan 有活力的男聲',aiden:'Aiden 陽光年輕男聲',ono_anna:'Ono Anna 日文女聲',sohee:'Sohee 韓文女聲'};
+const PRE={'不處理':{enabled:false,pitchHz:0,formant:1,speed:1},'8歲男孩':{enabled:true,pitchHz:290,formant:1.20,speed:1},'8歲女孩':{enabled:true,pitchHz:310,formant:1.22,speed:1},'11歲男孩':{enabled:true,pitchHz:240,formant:1.14,speed:1},'11歲女孩':{enabled:true,pitchHz:265,formant:1.14,speed:1},'小天使':{enabled:true,pitchHz:300,formant:1.10,speed:1}};
+function J(s){try{return JSON.parse(s)}catch(e){return {error:String(e)}}}
+function toast(m){$('#dMsg').textContent=m;}
+function play(u){const a=$('#aud');a.src=u+(u.includes('?')?'&':'?')+'r='+Date.now();a.play().catch(()=>{});}
+function fileUrl(rel){return 'https://app.local/files/'+rel;}
+function tab(t){cur=t;$$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));$$('main>section').forEach(s=>s.classList.toggle('hide',s.id!=='t-'+t));window.scrollTo(0,0);render();}
+$$('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));
+window.goBack=()=>{if(cur!=='proj'){tab('proj');return true;}return false;};
+
+function load(){INFO=J(VS.info());if(P&&!(INFO.projects||[]).some(p=>p.id===P))P='';if(!P&&INFO.projects&&INFO.projects.length)P=INFO.projects[0].id;localStorage.setItem('vs_p',P);S=P?J(VS.summary(P)):null;if(S&&S.error){S=null;}render();}
+function roleName(id){const r=S&&S.project.roles.find(r=>r.id===id);return r?r.name:id;}
+
+function render(){
+ if(!INFO)return;
+ const anyModel=INFO.models.some(m=>m.installed);
+ $('#needModel').classList.toggle('hide',anyModel);
+ $$('nav button[data-t=rec],nav button[data-t=role]').forEach(b=>b.disabled=!S);
+ $('#hdrProj').textContent=S?S.project.title:'';
+ if(cur==='proj')renderProj(); if(cur==='rec')renderRec(); if(cur==='role')renderRoles(); if(cur==='model')renderModels();
+}
+function renderProj(){
+ const L=INFO.projects||[];
+ $('#projList').innerHTML=L.length?L.map(p=>`<div class="card pj" style="margin:0 0 8px;${p.id===P?'border-color:var(--org)':''}"><div class="info"><div class="ttl">${esc(p.title)}</div>
+  <div class="hint">${esc(p.id)}　${p.error?'⚠ '+esc(p.error):`完成 ${p.done}/${p.total}${p.changed?`，已修改 ${p.changed}`:''}`}</div>
+  <div class="bar" style="margin-top:6px"><i style="width:${p.total?Math.round(p.done/p.total*100):0}%"></i></div></div>
+  <div style="display:flex;flex-direction:column;gap:6px"><button class="b sm" onclick="openProj('${p.id}')">開啟</button><button class="b sm gray" onclick="delProj('${p.id}')">刪除</button></div></div>`).join(''):'<div class="empty">還沒有專案，請匯入專案檔。</div>';
+}
+function openProj(id){P=id;localStorage.setItem('vs_p',P);S=J(VS.summary(P));tab('rec');}
+function delProj(id){if(confirm('刪除這個專案和已錄好的語音？（專案檔本身不會被刪）')){VS.deleteProject(id);}}
+function importUrl(){const u=$('#url').value.trim();if(!u)return;VS.importUrl(u);}
+
+function isOdd(l){return (l.takes||[]).some(t=>t.k===l.chosen&&t.odd);}
+function renderRec(){
+ if(!S)return;
+ $('#recTitle').textContent=S.project.title;$$('.pid').forEach(e=>e.textContent=P);
+ $('#recStat').innerHTML=`完成 <b>${S.done}</b> / ${S.total}${S.changed?`　<span class="badge s-changed">已修改 ${S.changed}</span>`:''}`;
+ $('#recBar').style.width=(S.total?S.done/S.total*100:0)+'%';
+ const todo=S.lines.filter(l=>l.status!=='done').length;$('#btnGen').textContent=todo?`▶ 產生未完成的 ${todo} 句`:'✓ 全部完成';$('#btnGen').disabled=!todo;
+ $$('#filters button').forEach(b=>b.classList.toggle('on',b.dataset.f===FILT));
+ const L=S.lines.filter(l=>!FILT||(FILT==='odd'?isOdd(l):l.status===FILT));
+ $('#lines').innerHTML=L.length?L.map(lineCard).join(''):'<div class="empty">沒有符合的句子</div>';
+}
+function lineCard(l){
+ const st=RUN[l.id]||l.status,cls={todo:'s-todo',done:'s-done',changed:'s-changed',running:'s-run'}[st]||'s-todo',lab={todo:'未錄',done:'完成',changed:'已修改，需重錄',running:'產生中…'}[st]||st;
+ const tk=(l.takes||[]).map(t=>`<button class="tk ${t.k===l.chosen?'on':''} ${t.odd?'odd':''}" onclick="pickTake('${l.id}',${t.k})" title="${t.odd?'長度不太正常，可能唸錯':''}">版本${t.k+1}　${t.dur}s${t.odd?' ⚠':''}</button>`).join('');
+ return `<div class="card line" id="L_${l.id}"><div class="top"><span class="who">${esc(roleName(l.role))}</span><span class="id">#${esc(l.id)}</span><span style="flex:1"></span><span class="badge ${cls}">${lab}</span></div>
+  <div class="tx">${esc(l.text)}</div>${l.say!==l.text?`<div class="say">唸：${esc(l.say)}</div>`:''}<div class="ins">🎭 ${esc(l.instruct)||'（沒有指令）'}</div>${l.note?`<div class="ins">📝 ${esc(l.note)}</div>`:''}
+  ${tk?`<div class="takes">${tk}</div>`:''}
+  <div class="row" style="margin-top:8px">${l.chosen>=0?`<button class="b sm green" onclick="play(fileUrl('projects/${P}/out/${l.id}.wav'))">▶ 播放</button>`:''}
+   <button class="b sm blue" onclick="more('${l.id}')">${(l.takes||[]).length?'＋ 再產生 2 個版本':'▶ 產生這句'}</button></div></div>`;
+}
+function pickTake(lid,k){play(fileUrl(`projects/${P}/takes/${lid}_${k}.wav`));const r=VS.choose(P,lid,k);if(r!=='ok')toast(r);else{S=J(VS.summary(P));renderRec();}}
+function more(lid){const l=S.lines.find(x=>x.id===lid);VS.generate(P,JSON.stringify([lid]),(l.takes||[]).length?2:1);}
+function genAll(){VS.generate(P,'',1);}
+$$('#filters button').forEach(b=>b.onclick=()=>{FILT=b.dataset.f;renderRec();});
+
+function renderRoles(){
+ if(!S)return;
+ $('#roles').innerHTML=S.project.roles.map(r=>{const p=Object.assign({enabled:false,pitchHz:0,formant:1,speed:1},S.posts[r.id]||{});
+  const done=S.lines.filter(l=>l.role===r.id&&l.chosen>=0);
+  return `<div class="card" data-r="${r.id}"><h3>${esc(r.name)} <span class="hint">${esc(r.id)}</span></h3>
+   <div class="hint">🔊 ${esc(SPK[r.speaker]||r.speaker)}${r.instruct?`<br>🎭 ${esc(r.instruct)}`:''}</div>
+   <div class="fx ${p.enabled?'on':''}"><label class="row" style="font-weight:700"><input type="checkbox" class="en" ${p.enabled?'checked':''}> 🧒 兒童音色後製</label>
+    <div class="presets">${Object.keys(PRE).map(k=>`<button data-p="${k}">${k}</button>`).join('')}</div>
+    <div class="sl">音高<input type="range" class="ph" min="0" max="450" step="5" value="${p.pitchHz}"><b class="vph"></b></div>
+    <div class="sl">共振峰<input type="range" class="fo" min="0.85" max="1.4" step="0.01" value="${p.formant}"><b class="vfo"></b></div>
+    <div class="sl">語速<input type="range" class="sp" min="0.7" max="1.3" step="0.01" value="${p.speed}"><b class="vsp"></b></div>
+    ${done.length?`<select class="smp">${done.map(l=>`<option value="${l.id}">#${l.id}　${esc(l.text.slice(0,18))}</option>`).join('')}</select>
+    <div class="row" style="margin-top:8px"><button class="b sm gray a-raw">▶ 原始</button><button class="b sm a-prev">▶ 後製試聽</button><button class="b sm green a-apply">套用到全部台詞</button></div>`:'<div class="hint">這個角色還沒有錄好的句子，錄好後才能試聽。</div>'}
+    <div class="row" style="margin-top:6px"><button class="b sm gray a-reset">恢復專案檔的設定</button></div></div></div>`;}).join('');
+ $$('#roles .card').forEach(card=>{const rid=card.dataset.r;
+  const upd=()=>{card.querySelector('.vph').textContent=+card.querySelector('.ph').value?card.querySelector('.ph').value+' Hz':'不變';card.querySelector('.vfo').textContent='×'+(+card.querySelector('.fo').value).toFixed(2);card.querySelector('.vsp').textContent='×'+(+card.querySelector('.sp').value).toFixed(2);card.querySelector('.fx').classList.toggle('on',card.querySelector('.en').checked);};
+  upd();card.querySelectorAll('input').forEach(i=>i.oninput=upd);
+  card.querySelectorAll('.presets button').forEach(b=>b.onclick=()=>{const q=PRE[b.dataset.p];card.querySelector('.en').checked=q.enabled;card.querySelector('.ph').value=q.pitchHz;card.querySelector('.fo').value=q.formant;card.querySelector('.sp').value=q.speed;upd();});
+  const post=()=>({enabled:card.querySelector('.en').checked,pitchHz:+card.querySelector('.ph').value,formant:+card.querySelector('.fo').value,speed:+card.querySelector('.sp').value});
+  const smp=()=>card.querySelector('.smp')?card.querySelector('.smp').value:'';
+  const ra=card.querySelector('.a-raw');if(ra)ra.onclick=()=>{const l=S.lines.find(x=>x.id===smp());if(l)play(fileUrl(`projects/${P}/takes/${l.id}_${l.chosen}.wav`));};
+  const pv=card.querySelector('.a-prev');if(pv)pv.onclick=()=>VS.previewPost(P,smp(),JSON.stringify(post()));
+  const ap=card.querySelector('.a-apply');if(ap)ap.onclick=()=>VS.setRolePost(P,rid,JSON.stringify(post()));
+  card.querySelector('.a-reset').onclick=()=>{if(confirm('恢復成專案檔裡的設定？'))VS.setRolePost(P,rid,'');};
+ });
+}
+
+function renderModels(){
+ $('#mirror').value=INFO.mirror||'';
+ $('#models').innerHTML=INFO.models.map(m=>{const got=m.files.reduce((a,f)=>a+f.bytes,0);
+  return `<div class="card" style="margin:0 0 8px;${m.id===INFO.active?'border-color:var(--org)':''}">
+  <label class="row" style="font-weight:700"><input type="radio" name="am" ${m.id===INFO.active?'checked':''} onchange="VS.setActiveModel('${m.id}')"> ${esc(m.name)}</label>
+  <div class="hint">${esc(m.note)}　約 ${(m.sizeMB/1024).toFixed(1)} GB　${m.installed?'<span class="badge s-done">已下載</span>':got?`<span class="badge s-changed">已下載 ${(got/1048576).toFixed(0)} MB，可以繼續</span>`:'<span class="badge s-todo">未下載</span>'}${INFO.loaded===m.id?'　<span class="badge s-run">使用中</span>':''}</div>
+  <div class="hint" style="font-size:12px">${m.files.map(f=>(f.ok?'✓ ':'・')+esc(f.name)).join('<br>')}</div>
+  <div class="row" style="margin-top:8px">${m.installed?`<button class="b sm gray" onclick="if(confirm('刪除這個模型？之後要用需要重新下載。'))VS.deleteModel('${m.id}')">刪除</button>`:`<button class="b sm blue" onclick="VS.downloadModel('${m.id}')">⬇ ${got?'繼續下載':'下載'}</button>`}</div></div>`;}).join('');
+ $('#about').innerHTML=`版本 ${esc(INFO.version)}<br>${esc(INFO.device)}<br>模型：Qwen3-TTS（Apache 2.0）　引擎：qwentts.cpp（MIT）　MP3：shine（LGPL）`;
+}
+function showLog(){const p=$('#nlog');p.textContent=VS.nativeLog()||'（沒有紀錄）';p.classList.remove('hide');}
+
+let rate=[];
+window.onVS=ev=>{
+ switch(ev.type){
+  case 'busy':$('#dName').textContent=ev.name;$('#dStop').classList.remove('hide');$('#dBar').style.width='0';break;
+  case 'idle':$('#dName').textContent='待命中';$('#dStop').classList.add('hide');$('#dBar').style.width='0';RUN={};load();break;
+  case 'log':toast(ev.msg);break;
+  case 'error':toast('⚠ '+ev.msg);alert(ev.msg);break;
+  case 'refresh':load();break;
+  case 'imported':toast(ev.msg);P=ev.project;localStorage.setItem('vs_p',P);break;
+  case 'download':{const pct=ev.total>0?ev.got/ev.total*100:0;$('#dBar').style.width=pct+'%';toast(`下載 ${ev.file}：${(ev.got/1048576).toFixed(0)}${ev.total>0?' / '+(ev.total/1048576).toFixed(0):''} MB`);break;}
+  case 'preview':play(ev.url);break;
+  case 'exported':{const i=ev.info;toast(`✓ 已匯出 ${i.lines} 句（${i.seconds} 秒，${i.mb} MB）到 ${i.folder}${i.missing?`；還有 ${i.missing} 句沒錄`:''}`);alert(`已匯出到手機的「${i.folder}」\nall.txt、map.txt（${i.lines} 句）`);break;}
+  case 'line':{if(ev.project!==P)break;const li=S&&S.lines.find(x=>x.id===ev.line);
+   if(ev.status==='running'){RUN[ev.line]='running';toast(`產生 #${ev.line}${ev.info.of>1?`（版本 ${ev.info.take}/${ev.info.of}）`:''}：${li?li.text.slice(0,24):''}`);}
+   else{delete RUN[ev.line];if(ev.status==='take'){rate.push(ev.info.rtf);if(rate.length>8)rate.shift();const r=rate.reduce((a,b)=>a+b,0)/rate.length;$('#recSpeed').textContent=`速度：每秒語音約 ${r.toFixed(1)} 秒`;}
+    if(ev.status==='error')toast(`#${ev.line} 失敗：${ev.info.msg}`);
+    S=J(VS.summary(P));const done=S.done,total=S.total;$('#dBar').style.width=(total?done/total*100:0)+'%';}
+   if(cur==='rec'){const el=document.getElementById('L_'+ev.line);const nl=S.lines.find(x=>x.id===ev.line);if(el&&nl){el.outerHTML=lineCard(nl);}
+    $('#recStat').innerHTML=`完成 <b>${S.done}</b> / ${S.total}`;$('#recBar').style.width=(S.total?S.done/S.total*100:0)+'%';}
+   break;}
+ }
+};
+load();
+</script>
+</body>
+</html>
