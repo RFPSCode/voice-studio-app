@@ -18,7 +18,7 @@ jobs:
       - name: Process
         run: |
           curl -sSL -o json.jar https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
-          mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/{Dsp,Voice,Store}.java scripts/DspAB.java
+          mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/{Dsp,Voice,Store,Pron}.java scripts/DspAB.java
           mkdir -p ab && java -cp cls:json.jar DspAB examples/校園安全時光機.voiceproj.json takes ab
       - name: Score
         run: |
