@@ -23,7 +23,7 @@ jobs:
       - name: Score
         run: |
           pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-          pip install -q librosa faster-whisper pyworld soundfile
+          pip install -q librosa faster-whisper
           git clone -q --depth 1 -b v1.2.0 https://github.com/tarepan/SpeechMOS.git /tmp/SpeechMOS
           python3 - <<'P'
           import glob, json, numpy as np, librosa, torch, warnings, difflib, re
@@ -32,18 +32,6 @@ jobs:
           utmos = torch.hub.load('/tmp/SpeechMOS', 'utmos22_strong', source='local', trust_repo=True)
           wm = WhisperModel('small', device='cpu', compute_type='int8')
           log = {e['id']: e for e in json.load(open('takes/log.json'))}
-          # reference: WORLD vocoder (pitch + spectral-envelope warp), to see what a vocoder approach would score
-          import pyworld as pw, soundfile as sf
-          for f in glob.glob('ab/*_0clean.wav'):
-              prm = json.load(open(f.replace('_0clean.wav', '.json')))
-              x, sr = sf.read(f); x = x.astype(np.float64)
-              f0, t = pw.harvest(x, sr, f0_floor=60, f0_ceil=700, frame_period=5)
-              sp = pw.cheaptrick(x, f0, t, sr); ap = pw.d4c(x, f0, t, sr)
-              a = prm['formant']; n = sp.shape[1]; fr = np.arange(n)
-              sp2 = np.array([np.interp(fr / a, fr, row) for row in sp])
-              ap2 = np.array([np.interp(fr / a, fr, row) for row in ap])
-              y = pw.synthesize(f0 * prm['ratio'], sp2, ap2, sr, 5)
-              sf.write(f.replace('_0clean', '_6world'), (y / max(1e-6, np.abs(y).max()) * 0.8).astype(np.float32), sr, subtype='PCM_16')
           keys = ['0clean', '2new']
           tot = {k: {'utmos': [], 'dns': [], 'cer': []} for k in keys}
           def han(t): return re.sub(r'[^一-鿿]', '', t)
