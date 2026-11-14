@@ -56,7 +56,7 @@ jobs:
       - name: Text the phone sends to the model (Pron.java)
         run: |
           curl -sSL -o json.jar https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
-          mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/Dsp.java android/app/src/main/java/tw/rfps/voicestudio/Store.java android/app/src/main/java/tw/rfps/voicestudio/Pron.java scripts/DspCheck.java scripts/PronText.java
+          mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/Dsp.java android/app/src/main/java/tw/rfps/voicestudio/Voice.java android/app/src/main/java/tw/rfps/voicestudio/Store.java android/app/src/main/java/tw/rfps/voicestudio/Pron.java scripts/DspCheck.java scripts/PronText.java
           java -cp cls:json.jar PronText android/app/src/main/assets/pron.json examples/校園安全時光機.voiceproj.json > pron_lines.jsonl
           head -5 pron_lines.jsonl
       - name: Synthesize example lines
