@@ -10,6 +10,7 @@
 ```
 
 - 語音模型：**Qwen3-TTS 1.7B CustomVoice**（阿里通義千問，Apache 2.0，可商用），9 種內建音色，用中文指令控制情緒。
+- 運算速度：自動選用手機 CPU 最快的指令集（i8mm、SVE2…），可以選核心數，也可以試用 GPU（Vulkan，實驗功能）；「模型」分頁有速度測試。
 - 台灣讀音：自動轉簡體再送進模型、常用詞改成台灣讀音（星期、垃圾、學姊…），唸錯的字標注音就能修正（例如「縫 ㄈㄥˊ」）。
 - 乾淨語音：自動去除喘氣、雜音和過長的停頓，長度不對自動重錄，語音長度和遊戲字幕同步。
 - 完全離線：模型第一次開啟 App 時下載（約 2.4 GB），之後不需要網路、沒有額度限制。
@@ -71,5 +72,6 @@ cd android && gradle assembleRelease  # 需要 JDK 17、Android SDK 35、NDK 27.
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)：Apache 2.0（模型不包含在 App 內，使用時下載）
 - [qwentts.cpp](https://github.com/ServeurpersoCom/qwentts.cpp)：MIT
 - [shine](https://github.com/toots/shine) MP3 編碼器：LGPL 2.0
+- GPU：[Vulkan-Headers](https://github.com/KhronosGroup/Vulkan-Headers)、[SPIRV-Headers](https://github.com/KhronosGroup/SPIRV-Headers)（Apache 2.0 / MIT）
 - 讀音資料：[OpenCC](https://github.com/BYVoid/OpenCC)（Apache 2.0）繁簡轉換；台灣讀音取自 [libchewing-data](https://github.com/chewing/libchewing-data)（LGPL 2.1），並以教育部《重編國語辭典修訂本》（[萌典資料](https://github.com/g0v/moedict-data)，CC BY-ND 3.0 TW）核對；大陸讀音 [pypinyin](https://github.com/mozillazg/python-pinyin)（MIT）
 - App 簽章金鑰 `android/app/voicestudio.keystore` 是公開的（方便自動編譯與覆蓋安裝），只適合個人／教學使用。
