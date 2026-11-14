@@ -69,16 +69,22 @@ jobs:
           pip install -q faster-whisper
           python3 - <<'E'
           import json, glob
+          import wave, numpy as np
           from faster_whisper import WhisperModel
           m = WhisperModel('small', device='cpu', compute_type='int8')
+          def load(f):
+              w = wave.open(f); a = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
+              sr = w.getframerate(); n = int(len(a) * 16000 / sr)
+              return np.interp(np.arange(n) * sr / 16000, np.arange(len(a)), a).astype(np.float32)
           log = json.load(open('out/log.json'))
           for e in log:
-              segs, _ = m.transcribe('out/%s_%s.wav' % (e['id'], e['role']), language='zh')
+              segs, _ = m.transcribe(load('out/%s_%s.wav' % (e['id'], e['role'])), language='zh', initial_prompt='以下是繁體中文的句子。')
               e['heard'] = ''.join(s.text for s in segs)
               print(e['id'], e['text'], '=>', e['heard'], flush=True)
           json.dump(log, open('out/log.json', 'w'), ensure_ascii=False, indent=1)
           E
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: model-test
           path: out/

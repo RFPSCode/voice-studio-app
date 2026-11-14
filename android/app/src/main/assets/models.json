@@ -4,7 +4,7 @@
       "id": "qwen3-cv-1.7b-q8",
       "name": "標準品質（Qwen3-TTS 1.7B CustomVoice，Q8_0）",
       "note": "建議。聲音最好，需要約 3 GB 記憶體。",
-      "sizeMB": 2400,
+      "sizeMB": 2240,
       "files": [
         { "name": "qwen-talker-1.7b-customvoice-Q8_0.gguf", "url": "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-talker-1.7b-customvoice-Q8_0.gguf" },
         { "name": "qwen-tokenizer-12hz-Q8_0.gguf", "url": "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-tokenizer-12hz-Q8_0.gguf" }
@@ -14,7 +14,7 @@
       "id": "qwen3-cv-1.7b-q4",
       "name": "快速（Qwen3-TTS 1.7B CustomVoice，Q4_K_M）",
       "note": "比較快、比較小，聲音略差一點。",
-      "sizeMB": 1500,
+      "sizeMB": 1410,
       "files": [
         { "name": "qwen-talker-1.7b-customvoice-Q4_K_M.gguf", "url": "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-talker-1.7b-customvoice-Q4_K_M.gguf" },
         { "name": "qwen-tokenizer-12hz-Q8_0.gguf", "url": "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-tokenizer-12hz-Q8_0.gguf" }
