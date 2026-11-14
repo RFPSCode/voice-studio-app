@@ -64,6 +64,22 @@ jobs:
           json.dump(log, open('out/log.json', 'w'), ensure_ascii=False, indent=1)
           E
           tail -20 /tmp/server.log
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: Child-voice post-processing (same Java code as the phone)
+        run: |
+          curl -sSL -o json.jar https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
+          mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/Dsp.java android/app/src/main/java/tw/rfps/voicestudio/Store.java scripts/DspCheck.java
+          python3 - <<'P'
+          import json, subprocess
+          p = json.load(open('examples/校園安全時光機.voiceproj.json')); roles = {r['id']: r for r in p['roles']}
+          for e in json.load(open('out/log.json')):
+              post = roles[e['role']].get('post') or {}
+              if post.get('enabled'):
+                  f = 'out/%s_%s.wav' % (e['id'], e['role'])
+                  subprocess.run(['java', '-cp', 'cls:json.jar', 'DspCheck', f, f.replace('.wav', '_child.wav'), str(post['pitchHz']), str(post['formant'])], check=True)
+                  e2 = dict(e, id=e['id'] + '_child'); print(e2['id'])
+          P
       - name: Transcribe (check the words)
         run: |
           pip install -q faster-whisper
@@ -77,6 +93,10 @@ jobs:
               sr = w.getframerate(); n = int(len(a) * 16000 / sr)
               return np.interp(np.arange(n) * sr / 16000, np.arange(len(a)), a).astype(np.float32)
           log = json.load(open('out/log.json'))
+          import os
+          for e0 in list(log):
+              c = 'out/%s_%s_child.wav' % (e0['id'], e0['role'])
+              if os.path.exists(c): log.append(dict(e0, id=e0['id'] + '_child'))
           for e in log:
               segs, _ = m.transcribe(load('out/%s_%s.wav' % (e['id'], e['role'])), language='zh', initial_prompt='以下是繁體中文的句子。')
               e['heard'] = ''.join(s.text for s in segs)
