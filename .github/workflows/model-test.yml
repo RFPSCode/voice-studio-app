@@ -7,9 +7,18 @@ on:
       lines:
         description: 'how many lines of the example project to synthesize'
         default: '12'
+      ids:
+        description: 'only these line ids, comma separated (overrides lines)'
+        default: ''
+      push:
+        description: 'push the raw takes to the dsp-samples branch (yes/no)'
+        default: 'no'
       compare:
         description: 'also synthesize the raw traditional text, to compare pronunciation fixes (yes/no)'
         default: 'no'
+
+permissions:
+  contents: write
 
 jobs:
   test:
@@ -67,7 +76,8 @@ jobs:
               for ch in r['id']: h = (31 * h + ord(ch)) & 0xFFFFFFFFFFFFFFFF
               return (h & 0x7fffffff) % 1000000007
           log = []
-          for l in p['lines'][:int(sys.argv[1])]:
+          ids = [x.strip() for x in '${{ github.event.inputs.ids }}'.split(',') if x.strip()]
+          for l in ([l for l in p['lines'] if l['id'] in ids] if ids else p['lines'][:int(sys.argv[1])]):
               r = roles[l['role']]
               ins = '；'.join(x for x in [p.get('instruct',''), r.get('instruct',''), l.get('instruct',''), '說話乾淨俐落，不要喘氣或發出多餘的聲音，句子中間不要停頓太久'] if x)
               body = {'input': model_text[l['id']]['model'], 'voice': r['speaker'], 'language': 'chinese', 'instructions': ins, 'response_format': 'wav', 'temperature': 0.8, 'seed': role_seed(r)}
@@ -143,6 +153,12 @@ jobs:
           for k, v in tot.items():
               if v: print('SYLLABLE ERROR %s: %.3f over %d lines' % (k, sum(v) / len(v), len(v)))
           E
+      - name: Push raw takes to the dsp-samples branch
+        if: github.event.inputs.push == 'yes'
+        run: |
+          mkdir /tmp/s && cp out/[0-9]*_*.wav out/log.json /tmp/s/ && rm -f /tmp/s/*_raw.wav /tmp/s/*_post.wav
+          cd /tmp/s && git init -q && git checkout -q -b dsp-samples && git add . && git -c user.name=ci -c user.email=ci@local commit -qm samples
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" dsp-samples
       - uses: actions/upload-artifact@v4
         if: always()
         with:
