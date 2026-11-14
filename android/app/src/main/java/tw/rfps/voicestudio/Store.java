@@ -449,7 +449,7 @@ public class Store {
         + "\"渾厚男聲\":{\"pitchHz\":100,\"pitchLock\":0.5,\"formant\":0.92,\"bassDb\":4,\"trebleDb\":-1},"
         + "\"一般女聲\":{\"pitchHz\":220,\"pitchLock\":0.5,\"formant\":1.0},"
         + "\"一般男聲\":{\"pitchHz\":125,\"pitchLock\":0.5,\"formant\":1.0},"
-        + "\"惡魔\":{\"pitchHz\":140,\"pitchLock\":0.5,\"formant\":0.94,\"octDown\":0.35,\"growl\":0.25,\"bassDb\":3,\"echoMs\":110,\"echoFeedback\":0.3,\"echoMix\":0.25},"
+        + "\"惡魔\":{\"pitchHz\":150,\"pitchLock\":0.5,\"formant\":0.95,\"octDown\":0.2,\"growl\":0.12,\"bassDb\":2,\"echoMs\":100,\"echoFeedback\":0.25,\"echoMix\":0.2},"
         + "\"天使\":{\"pitchHz\":290,\"pitchLock\":0.5,\"formant\":1.08,\"octUp\":0.18,\"trebleDb\":3,\"reverb\":0.35}"
         + "}";
 

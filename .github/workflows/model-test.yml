@@ -48,11 +48,16 @@ jobs:
           import json, sys, time, urllib.request
           p = json.load(open('examples/校園安全時光機.voiceproj.json'))
           roles = {r['id']: r for r in p['roles']}
+          def role_seed(r):  # same as Store.roleSeed (Java 64-bit hash)
+              if 'seed' in r: return r['seed']
+              h = 1125899906842597
+              for ch in r['id']: h = (31 * h + ord(ch)) & 0xFFFFFFFFFFFFFFFF
+              return (h & 0x7fffffff) % 1000000007
           log = []
           for l in p['lines'][:int(sys.argv[1])]:
               r = roles[l['role']]
               ins = '；'.join(x for x in [p.get('instruct',''), r.get('instruct',''), l.get('instruct','')] if x)
-              body = {'input': l.get('say') or l['text'], 'voice': r['speaker'], 'language': 'chinese', 'instructions': ins, 'response_format': 'wav', 'temperature': 0.8}
+              body = {'input': l.get('say') or l['text'], 'voice': r['speaker'], 'language': 'chinese', 'instructions': ins, 'response_format': 'wav', 'temperature': 0.8, 'seed': role_seed(r)}
               t0 = time.time()
               req = urllib.request.Request('http://localhost:8080/v1/audio/speech', data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
               wav = urllib.request.urlopen(req, timeout=900).read()

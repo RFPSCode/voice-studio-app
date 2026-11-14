@@ -47,15 +47,15 @@
    "post": {
     "enabled": true,
     "preset": "惡魔",
-    "pitchHz": 140,
+    "pitchHz": 150,
     "pitchLock": 0.5,
-    "formant": 0.94,
-    "octDown": 0.35,
-    "growl": 0.25,
-    "bassDb": 3,
-    "echoMs": 110,
-    "echoFeedback": 0.3,
-    "echoMix": 0.25
+    "formant": 0.95,
+    "octDown": 0.2,
+    "growl": 0.12,
+    "bassDb": 2,
+    "echoMs": 100,
+    "echoFeedback": 0.25,
+    "echoMix": 0.2
    }
   },
   {
