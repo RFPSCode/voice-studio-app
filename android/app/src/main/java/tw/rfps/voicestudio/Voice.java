@@ -510,7 +510,7 @@ public final class Voice {
     }
 
     /** Echo without ducking (comparison). */
-    static float[] echoPlain(float[] x, int sr, double delayMs, double feedback, double mix) {
+    public static float[] echoPlain(float[] x, int sr, double delayMs, double feedback, double mix) {
         if (mix <= 0 || delayMs <= 0) return x;
         double D = delayMs * sr / 1000.0;
         feedback = Math.max(0, Math.min(0.85, feedback));
