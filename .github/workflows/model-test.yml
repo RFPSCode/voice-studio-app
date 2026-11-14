@@ -96,9 +96,9 @@ jobs:
           import os
           for e0 in list(log):
               c = 'out/%s_%s_child.wav' % (e0['id'], e0['role'])
-              if os.path.exists(c): log.append(dict(e0, id=e0['id'] + '_child'))
+              if os.path.exists(c): log.append(dict(e0, id=e0['id'] + '_child', file=c))
           for e in log:
-              segs, _ = m.transcribe(load('out/%s_%s.wav' % (e['id'], e['role'])), language='zh', initial_prompt='以下是繁體中文的句子。')
+              segs, _ = m.transcribe(load(e.get('file') or 'out/%s_%s.wav' % (e['id'], e['role'])), language='zh', initial_prompt='以下是繁體中文的句子。')
               e['heard'] = ''.join(s.text for s in segs)
               print(e['id'], e['text'], '=>', e['heard'], flush=True)
           json.dump(log, open('out/log.json', 'w'), ensure_ascii=False, indent=1)
