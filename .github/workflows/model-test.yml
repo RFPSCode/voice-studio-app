@@ -78,10 +78,16 @@ jobs:
           python3 - <<'P'
           import json, subprocess
           p = json.load(open('examples/校園安全時光機.voiceproj.json')); roles = {r['id']: r for r in p['roles']}
-          for e in json.load(open('out/log.json')):
+          log = json.load(open('out/log.json')); f0s = {}
+          for e in log:   # the role's typical pitch = median of its lines, as on the phone
+              v = float(subprocess.run(['java', '-cp', 'cls:json.jar', 'DspCheck', '--f0', 'out/%s_%s.wav' % (e['id'], e['role'])], capture_output=True, text=True).stdout.strip() or 0)
+              if v > 0: f0s.setdefault(e['role'], []).append(v)
+          base = {k: sorted(v)[len(v) // 2] for k, v in f0s.items()}
+          print('role base pitch', base)
+          for e in log:
               post = roles[e['role']].get('post') or {}
               f = 'out/%s_%s.wav' % (e['id'], e['role'])
-              subprocess.run(['java', '-cp', 'cls:json.jar', 'DspCheck', f, f.replace('.wav', '_child.wav'), json.dumps(post, ensure_ascii=False), '0.5' if '…' in e['text'] else '0.3'], check=True)
+              subprocess.run(['java', '-cp', 'cls:json.jar', 'DspCheck', f, f.replace('.wav', '_child.wav'), json.dumps(post, ensure_ascii=False), '0.5' if '…' in e['text'] else '0.3', str(base.get(e['role'], 0))], check=True)
           P
       - name: Transcribe (check the words)
         run: |

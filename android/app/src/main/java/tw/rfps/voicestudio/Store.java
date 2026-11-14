@@ -481,12 +481,12 @@ public class Store {
     public static final String PRESETS_JSON = "{"
         + "\"男童\":{\"pitchHz\":270,\"pitchLock\":0.6,\"formant\":1.17,\"trebleDb\":1},"
         + "\"女童\":{\"pitchHz\":300,\"pitchLock\":0.6,\"formant\":1.2,\"trebleDb\":1},"
-        + "\"可愛女聲\":{\"pitchHz\":290,\"pitchLock\":0.5,\"formant\":1.1,\"speed\":1.03,\"trebleDb\":2},"
-        + "\"渾厚男聲\":{\"pitchHz\":100,\"pitchLock\":0.5,\"formant\":0.92,\"bassDb\":4,\"trebleDb\":-1},"
-        + "\"一般女聲\":{\"pitchHz\":220,\"pitchLock\":0.5,\"formant\":1.0},"
-        + "\"一般男聲\":{\"pitchHz\":125,\"pitchLock\":0.5,\"formant\":1.0},"
-        + "\"惡魔\":{\"pitchHz\":150,\"pitchLock\":0.5,\"formant\":0.95,\"octDown\":0.2,\"growl\":0.12,\"bassDb\":2,\"echoMs\":100,\"echoFeedback\":0.25,\"echoMix\":0.2},"
-        + "\"天使\":{\"pitchHz\":290,\"pitchLock\":0.5,\"formant\":1.08,\"octUp\":0.18,\"trebleDb\":3,\"reverb\":0.35}"
+        + "\"可愛女聲\":{\"pitchHz\":0,\"pitchLock\":0.6,\"formant\":1.1,\"speed\":1.03,\"trebleDb\":2},"
+        + "\"渾厚男聲\":{\"pitchHz\":0,\"pitchLock\":0.6,\"formant\":0.9,\"bassDb\":4,\"trebleDb\":-1},"
+        + "\"一般女聲\":{\"pitchHz\":0,\"pitchLock\":0.6,\"formant\":1.0},"
+        + "\"一般男聲\":{\"pitchHz\":0,\"pitchLock\":0.6,\"formant\":1.0},"
+        + "\"惡魔\":{\"pitchHz\":0,\"pitchLock\":0.6,\"formant\":0.9,\"octDown\":0.2,\"growl\":0.12,\"bassDb\":2,\"echoMs\":100,\"echoFeedback\":0.25,\"echoMix\":0.2},"
+        + "\"天使\":{\"pitchHz\":0,\"pitchLock\":0.6,\"formant\":1.08,\"octUp\":0.18,\"trebleDb\":3,\"reverb\":0.35}"
         + "}";
 
     static double num(JSONObject o, String k, double d, double lo, double hi) {
@@ -504,13 +504,14 @@ public class Store {
         if (post == null || !post.optBoolean("enabled")) return a;
         double target = num(post, "pitchHz", 0, 0, 500), lock = num(post, "pitchLock", 0.5, 0, 1);
         double formant = num(post, "formant", 1, 0.8, 1.4), speed = num(post, "speed", 1, 0.7, 1.3);
+        // target = pitchHz, or (pitchHz 0) the role's own typical pitch: pitchLock then only evens out the lines.
+        // Shifts are limited to about -6/+8 semitones; bigger shifts damage the words.
         double ratio = 1;
-        if (target > 0) {
-            double line = Dsp.medianF0(a, SR);
-            double base = baseF0 > 0 ? baseF0 : line;
-            if (line <= 0) line = base;
-            if (base > 0) ratio = Math.max(0.4, Math.min(3.0, target / (Math.pow(base, 1 - lock) * Math.pow(line, lock))));
-        }
+        double line = (target > 0 || lock > 0) ? Dsp.medianF0(a, SR) : 0;
+        double base = baseF0 > 0 ? baseF0 : line;
+        if (line <= 0) line = base;
+        double tgt = target > 0 ? target : base;
+        if (base > 0 && tgt > 0) ratio = Math.max(0.7, Math.min(1.6, tgt / (Math.pow(base, 1 - lock) * Math.pow(line, lock))));
         float[] y = (Math.abs(ratio - 1) > 1e-3 || Math.abs(formant - 1) > 1e-3 || Math.abs(speed - 1) > 1e-3)
             ? Dsp.childFx(a, SR, ratio, formant, speed) : a.clone();
         y = Dsp.layer(y, SR, 0.5, 0.8, num(post, "octDown", 0, 0, 1));
