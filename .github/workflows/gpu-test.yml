@@ -1,0 +1,60 @@
+name: GPU test (app native library, CPU vs Vulkan)
+
+# Manual check of the app's native library on a PC: picks the CPU module, then synthesizes the same
+# sentence on CPU and on Vulkan (lavapipe, a software GPU driver: only checks that the GPU path gives
+# the right words, not the speed of a phone GPU).
+on:
+  workflow_dispatch:
+    inputs:
+      text:
+        description: 'sentence (traditional Chinese)'
+        default: '小朋友，下課不要在走廊上奔跑。'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          sudo apt-get update -q > /dev/null
+          sudo apt-get install -y -q glslc mesa-vulkan-drivers libvulkan1 vulkan-tools > /dev/null
+          vulkaninfo --summary 2>/dev/null | grep -E "deviceName|deviceType" || true
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: Build the app's native library for the PC
+        run: |
+          bash scripts/fetch_deps.sh
+          cmake -S android/app/src/main/cpp -B hb -DCMAKE_BUILD_TYPE=Release -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$PWD/hb/lib > /dev/null
+          cmake --build hb -j4 > hb.log 2>&1 || { tail -50 hb.log; exit 1; }
+          ls hb/lib
+      - name: Download model (Q8_0)
+        run: |
+          mkdir -p models && cd models
+          for f in $(python3 -c "import json;print(' '.join(x['url'] for x in json.load(open('../android/app/src/main/assets/models.json'))['models'][0]['files']))"); do curl -sSL -o "$(basename $f)" "$f"; done
+      - name: Synthesize on CPU and on Vulkan
+        run: |
+          mkdir -p cls && javac -encoding UTF-8 -d cls android/app/src/main/java/tw/rfps/voicestudio/Native.java scripts/NativeCheck.java
+          TEXT="${{ github.event.inputs.text }}"
+          M=models/qwen-talker-1.7b-customvoice-Q8_0.gguf; C=models/qwen-tokenizer-12hz-Q8_0.gguf
+          export GGML_VK_VISIBLE_DEVICES=0
+          java -Djava.library.path=hb/lib -cp cls NativeCheck hb/lib $M $C CPU 0 vivian "$TEXT" cpu.wav
+          timeout 80m java -Djava.library.path=hb/lib -cp cls NativeCheck hb/lib $M $C Vulkan0 0 vivian "$TEXT" gpu.wav || echo "VULKAN FAILED"
+      - name: Transcribe
+        run: |
+          pip install -q faster-whisper
+          python3 - <<'E2'
+          import os, wave, numpy as np
+          from faster_whisper import WhisperModel
+          m = WhisperModel('small', device='cpu', compute_type='int8')
+          for f in ['cpu.wav', 'gpu.wav']:
+              if not os.path.exists(f): print(f, 'missing'); continue
+              w = wave.open(f); x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
+              x = np.interp(np.arange(0, len(x), 1.5), np.arange(len(x)), x).astype(np.float32)
+              segs, _ = m.transcribe(x, language='zh', initial_prompt='以下是繁體中文的句子。')
+              print('HEARD', f, round(len(x) / 16000, 2), 's |', ''.join(s.text for s in segs))
+          E2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: gpu-test, path: '*.wav' }

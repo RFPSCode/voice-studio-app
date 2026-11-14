@@ -36,6 +36,9 @@ public class Bridge {
     private final AtomicBoolean cancel = new AtomicBoolean(false);
     private volatile String busy = "";
     private final SharedPreferences prefs;
+    private final String cpuVariant;
+    private String notice = "";
+    private JSONArray gpuList = null;
 
     Bridge(MainActivity act) throws Exception {
         this.act = act;
@@ -44,6 +47,11 @@ public class Bridge {
         try (InputStream in = act.getAssets().open("models.json")) { cat = new String(Store.readAll(in), StandardCharsets.UTF_8); }
         models = new Models(new File(act.getFilesDir(), "models"), cat);
         prefs = act.getSharedPreferences("vs", 0);
+        cpuVariant = Native.setup(act.getApplicationInfo().nativeLibraryDir);
+        if (prefs.getBoolean("gpu_pending", false)) {   // the app died while using the GPU last time
+            prefs.edit().putBoolean("gpu_pending", false).putString("device", "CPU").apply();
+            notice = "上次使用 GPU 時 App 停止運作了，已經自動改回 CPU。";
+        }
         try (InputStream in = act.getAssets().open("pron.json")) { Store.pron = new Pron(new String(Store.readAll(in), StandardCharsets.UTF_8)); }
         catch (Exception e) { Store.pron = null; }
     }
@@ -107,15 +115,110 @@ public class Bridge {
         try { models.find(id); return true; } catch (Exception e) { return false; }
     }
 
-    private void loadEngine() throws Exception {
+    String device() { return prefs.getString("device", "CPU"); }
+    int threads() { return prefs.getInt("threads", 0); }
+
+    private void loadEngine() throws Exception { loadEngine(device(), threads()); }
+
+    private void loadEngine(String device, int threads) throws Exception {
         String id = activeModel();
         if (!models.installed(id)) throw new IllegalStateException("還沒下載模型，請到「模型」分頁下載。");
-        if (!engine.loadedModel().equals(id)) {
-            emit("log", "msg", "載入模型中（第一次約 10–30 秒）…");
+        if (!engine.config().equals(id + "|" + device + "|" + threads)) {
+            boolean gpu = !"CPU".equals(device);
+            emit("log", "msg", "載入模型中（" + (gpu ? "GPU" : "CPU") + "，第一次約 10–30 秒）…");
             long t0 = System.currentTimeMillis();
-            engine.ensure(id, models.talker(id), models.codec(id));
+            if (gpu) {
+                if (gpus().length() == 0) throw new IllegalStateException("這支手機找不到可以用的 GPU（Vulkan），請改用 CPU。");
+                prefs.edit().putBoolean("gpu_pending", true).commit();
+            }
+            try {
+                engine.ensure(id, models.talker(id), models.codec(id), device, threads);
+            } catch (Exception e) {
+                if (gpu) { prefs.edit().putBoolean("gpu_pending", false).commit(); throw new IllegalStateException("GPU 載入失敗，請改用 CPU：" + e.getMessage()); }
+                throw e;
+            }
+            if (gpu) prefs.edit().putBoolean("gpu_pending", false).commit();
             emit("log", "msg", "模型已載入（" + (System.currentTimeMillis() - t0) / 1000 + " 秒）");
         }
+    }
+
+    /** GPUs the Vulkan backend can use (loads it the first time). */
+    synchronized JSONArray gpus() {
+        if (gpuList != null) return gpuList;
+        gpuList = new JSONArray();
+        try {
+            for (String g : Native.gpus()) {
+                String[] f = g.split("\t");
+                gpuList.put(new JSONObject().put("id", f[0]).put("name", f.length > 1 ? f[1] : f[0]).put("mb", f.length > 2 ? Long.parseLong(f[2]) : 0));
+            }
+        } catch (Throwable e) { emit("log", "msg", "GPU 偵測失敗：" + e.getMessage()); }
+        return gpuList;
+    }
+
+    // ------------------------------------------------------------ speed (CPU / GPU)
+    @JavascriptInterface
+    public String compute() {
+        try {
+            return new JSONObject().put("device", device()).put("threads", threads()).put("cpu", cpuVariant)
+                .put("cores", Runtime.getRuntime().availableProcessors()).put("gpus", prefs.getBoolean("gpu_checked", false) ? gpus() : null)
+                .put("results", new JSONArray(prefs.getString("speed", "[]"))).toString();
+        } catch (Exception e) { return "{}"; }
+    }
+
+    @JavascriptInterface
+    public void setCompute(String device, int threads) {
+        prefs.edit().putString("device", device == null || device.isEmpty() ? "CPU" : device).putInt("threads", Math.max(0, threads)).apply();
+        emit("refresh");
+    }
+
+    /** Same sentence on CPU (4, 6, 8 threads) and GPU, each timed after a warm-up; the clips can be heard afterwards. */
+    @JavascriptInterface
+    public void speedTest() {
+        start("速度測試", () -> {
+            prefs.edit().putBoolean("gpu_checked", true).apply();
+            JSONArray gs = gpus();
+            java.util.List<Object[]> cfg = new java.util.ArrayList<>();
+            int cores = Runtime.getRuntime().availableProcessors();
+            cfg.add(new Object[]{"CPU", 0});
+            for (int t : new int[]{6, 8}) if (t <= cores && t != cores / 2) cfg.add(new Object[]{"CPU", t});
+            for (int i = 0; i < gs.length(); i++) cfg.add(new Object[]{gs.getJSONObject(i).getString("id"), 0});
+            File dir = new File(store.root, "speedtest");
+            dir.mkdirs();
+            JSONArray res = new JSONArray();
+            String text = "小朋友，下課的時候不要在走廊上奔跑，要慢慢走，才不會撞到別人喔！";
+            String model = Store.pron != null ? Store.pron.convert(text, null, true).text : text;
+            for (int i = 0; i < cfg.size() && !cancel.get(); i++) {
+                String dev = (String) cfg.get(i)[0];
+                int th = (Integer) cfg.get(i)[1];
+                String label = "CPU".equals(dev) ? "CPU " + (th == 0 ? Math.max(1, cores / 2) : th) + " 核心" : "GPU（" + dev + "）";
+                emit("log", "msg", "速度測試 " + (i + 1) + "/" + cfg.size() + "：" + label + "…");
+                JSONObject r = new JSONObject().put("device", dev).put("threads", th).put("label", label);
+                try {
+                    loadEngine(dev, th);
+                    boolean gpu = !"CPU".equals(dev);
+                    if (gpu) prefs.edit().putBoolean("gpu_pending", true).commit();
+                    engine.synth("你好。", "Chinese", "vivian", "", 1, 0, 0);   // warm-up
+                    long t0 = System.nanoTime();
+                    float[] a = engine.synth(model, "Chinese", "vivian", "", 12345, 0, 0);
+                    double secs = (System.nanoTime() - t0) / 1e9, dur = a.length / 24000.0;
+                    if (gpu) prefs.edit().putBoolean("gpu_pending", false).commit();
+                    File f = new File(dir, (gpu ? "gpu" : "cpu" + th) + ".wav");
+                    Store.writeWav(f, a);
+                    double peak = 0;
+                    for (float x : a) peak = Math.max(peak, Math.abs(x));
+                    r.put("secs", Math.round(secs * 10) / 10.0).put("dur", Math.round(dur * 100) / 100.0).put("rtf", Math.round(secs / Math.max(0.1, dur) * 100) / 100.0)
+                     .put("file", "speedtest/" + f.getName()).put("odd", dur < 2.5 || dur > 12 || peak < 0.01);
+                } catch (Throwable e) {
+                    prefs.edit().putBoolean("gpu_pending", false).commit();
+                    r.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
+                }
+                res.put(r);
+                emit(new JSONObject().put("type", "speed").put("results", res));
+            }
+            engine.release();
+            prefs.edit().putString("speed", res.toString()).apply();
+            emit("refresh");
+        });
     }
 
     // ------------------------------------------------------------ queries
@@ -127,6 +230,8 @@ public class Bridge {
             o.put("active", activeModel());
             o.put("loaded", engine.loadedModel());
             o.put("mirror", prefs.getString("mirror", ""));
+            o.put("notice", notice);
+            notice = "";
             o.put("busy", busy);
             JSONArray ps = new JSONArray();
             for (String id : store.projectIds()) {

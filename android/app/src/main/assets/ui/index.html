@@ -145,6 +145,18 @@ pre{white-space:pre-wrap;font-size:11.5px;background:#1b1d3a;color:#d6d4ff;borde
   </div>
  </div>
  <div class="card">
+  <h2>運算速度</h2>
+  <div class="hint">可以用 CPU 或手機的 GPU 產生語音。GPU 是實驗功能，不一定比較快，聲音也可能出錯，先按「速度測試」比較看看（約 2–4 分鐘），再試聽每一種的聲音。</div>
+  <div class="row" style="margin-top:8px;gap:8px">
+   <label class="f" style="margin:0">運算方式</label><select id="cDev" style="width:auto"></select>
+   <label class="f" style="margin:0">CPU 核心</label><select id="cThr" style="width:auto"></select>
+   <button class="b sm blue" onclick="VS.setCompute($('#cDev').value,+$('#cThr').value);toast('已儲存，下次產生語音時生效')">儲存</button>
+  </div>
+  <div class="row" style="margin-top:8px"><button class="b sm green" onclick="VS.speedTest()">⏱ 速度測試</button></div>
+  <div id="speed" style="margin-top:8px"></div>
+  <div class="hint" id="cInfo" style="font-size:12px;margin-top:6px"></div>
+ </div>
+ <div class="card">
   <h3>關於</h3>
   <div class="hint" id="about"></div>
   <div class="row" style="margin-top:8px"><button class="b sm gray" onclick="showLog()">顯示引擎紀錄</button></div>
@@ -188,7 +200,7 @@ function tab(t){cur=t;$$('nav button').forEach(b=>b.classList.toggle('on',b.data
 $$('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.t));
 window.goBack=()=>{if(cur!=='proj'){tab('proj');return true;}return false;};
 
-function load(){INFO=J(VS.info());if(P&&!(INFO.projects||[]).some(p=>p.id===P))P='';if(!P&&INFO.projects&&INFO.projects.length)P=INFO.projects[0].id;localStorage.setItem('vs_p',P);S=P?J(VS.summary(P)):null;if(S&&S.error){S=null;}render();}
+function load(){INFO=J(VS.info());if(INFO.notice)setTimeout(()=>alert(INFO.notice),300);if(P&&!(INFO.projects||[]).some(p=>p.id===P))P='';if(!P&&INFO.projects&&INFO.projects.length)P=INFO.projects[0].id;localStorage.setItem('vs_p',P);S=P?J(VS.summary(P)):null;if(S&&S.error){S=null;}render();}
 function roleName(id){const r=S&&S.project.roles.find(r=>r.id===id);return r?r.name:id;}
 
 function render(){
@@ -292,7 +304,22 @@ function renderModels(){
   <div class="hint">${esc(m.note)}　約 ${(m.sizeMB/1024).toFixed(1)} GB　${m.installed?'<span class="badge s-done">已下載</span>':got?`<span class="badge s-changed">已下載 ${(got/1048576).toFixed(0)} MB，可以繼續</span>`:'<span class="badge s-todo">未下載</span>'}${INFO.loaded===m.id?'　<span class="badge s-run">使用中</span>':''}</div>
   <div class="hint" style="font-size:12px">${m.files.map(f=>(f.ok?'✓ ':'・')+esc(f.name)).join('<br>')}</div>
   <div class="row" style="margin-top:8px">${m.installed?`<button class="b sm gray" onclick="if(confirm('刪除這個模型？之後要用需要重新下載。'))VS.deleteModel('${m.id}')">刪除</button>`:`<button class="b sm blue" onclick="VS.downloadModel('${m.id}')">⬇ ${got?'繼續下載':'下載'}</button>`}</div></div>`;}).join('');
+ renderCompute();
  $('#about').innerHTML=`版本 ${esc(INFO.version)}<br>${esc(INFO.device)}<br>模型：Qwen3-TTS（Apache 2.0）　引擎：qwentts.cpp（MIT）　MP3：shine（LGPL）`;
+}
+function renderCompute(res){
+ const C=J(VS.compute());if(!C||C.cores==null)return;
+ const gp=C.gpus||[];const half=Math.max(1,Math.floor((C.cores||8)/2));
+ $('#cDev').innerHTML=`<option value="CPU">CPU</option>`+gp.map(g=>`<option value="${esc(g.id)}">GPU（實驗）：${esc(g.name)}</option>`).join('')+(C.gpus==null&&C.device!=='CPU'?`<option value="${esc(C.device)}">GPU（實驗）</option>`:'')+(C.gpus==null?'<option disabled>GPU：先按速度測試偵測</option>':'');
+ $('#cDev').value=C.device||'CPU';
+ const ts=[0,4,6,8].filter(t=>t===0||t<=(C.cores||8)&&t!==half);
+ $('#cThr').innerHTML=ts.map(t=>`<option value="${t}">${t===0?'自動（'+half+'）':t}</option>`).join('');$('#cThr').value=String(C.threads||0);
+ const R=res||C.results||[];
+ if(R.length){const ok=R.filter(r=>r.rtf&&!r.odd);const best=ok.length?ok.reduce((a,b)=>a.rtf<=b.rtf?a:b):null;
+  $('#speed').innerHTML='<div class="hint">數字是「每 1 秒語音要算幾秒」，越小越快。</div>'+R.map(r=>`<div class="row" style="justify-content:space-between;border-top:1px solid #eee;padding:6px 0">
+   <div><b>${esc(r.label)}</b>${best===r?' <span class="badge s-done">最快</span>':''}<br><span class="hint">${r.error?'⚠ '+esc(r.error):`${r.rtf} 倍（${r.secs} 秒算出 ${r.dur} 秒語音）${r.odd?' ⚠ 聲音可能不正常':''}`}</span></div>
+   <div class="row" style="gap:6px">${r.file?`<button class="b sm gray" onclick="play(fileUrl('${r.file}'))">▶ 試聽</button>`:''}${r.rtf?`<button class="b sm blue" onclick="VS.setCompute('${esc(r.device)}',${r.threads});toast('已改用 ${esc(r.label)}')">用這個</button>`:''}</div></div>`).join('');}
+ $('#cInfo').textContent=`CPU 模組：${(C.cpu||'?').replace('libggml-cpu-','').replace('.so','')}　核心數：${C.cores}　目前：${C.device==='CPU'?'CPU':'GPU'}${C.threads?'，'+C.threads+' 核心':''}`;
 }
 function showLog(){const p=$('#nlog');p.textContent=VS.nativeLog()||'（沒有紀錄）';p.classList.remove('hide');}
 
@@ -307,6 +334,7 @@ window.onVS=ev=>{
   case 'imported':toast(ev.msg);P=ev.project;localStorage.setItem('vs_p',P);break;
   case 'download':{const pct=ev.total>0?ev.got/ev.total*100:0;$('#dBar').style.width=pct+'%';toast(`下載 ${ev.file}：${(ev.got/1048576).toFixed(0)}${ev.total>0?' / '+(ev.total/1048576).toFixed(0):''} MB`);break;}
   case 'preview':play(ev.url);break;
+  case 'speed':renderCompute(ev.results);break;
   case 'exported':{const i=ev.info;toast(`✓ 已匯出 ${i.lines} 句（${i.seconds} 秒，${i.mb} MB）到 ${i.folder}${i.missing?`；還有 ${i.missing} 句沒錄`:''}${i.minutes!=null?`，用了 ${i.minutes} 分鐘`:''}`);alert(`已匯出到手機的「${i.folder}」\nall.txt、map.txt（${i.lines} 句）`);break;}
   case 'line':{if(ev.project!==P)break;const li=S&&S.lines.find(x=>x.id===ev.line);
    if(ev.status==='running'){RUN[ev.line]='running';toast(`產生 #${ev.line}${ev.info.of>1?`（版本 ${ev.info.take}/${ev.info.of}）`:''}：${li?li.text.slice(0,24):''}`);}

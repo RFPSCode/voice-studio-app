@@ -20,4 +20,20 @@ fetch() { # url dir commit
 fetch https://github.com/ServeurpersoCom/qwentts.cpp.git qwentts.cpp "$QWEN_COMMIT"
 git -C qwentts.cpp submodule update --init --depth 1 ggml
 fetch https://github.com/toots/shine.git shine "$SHINE_COMMIT"
+
+# Vulkan (GPU, experimental): C++ headers + SPIR-V headers, same SDK version
+VK_TAG=vulkan-sdk-1.4.363.0
+fetch https://github.com/KhronosGroup/Vulkan-Headers.git Vulkan-Headers "refs/tags/$VK_TAG"
+fetch https://github.com/KhronosGroup/SPIRV-Headers.git SPIRV-Headers "refs/tags/$VK_TAG"
+if [ ! -f spirv-install/share/cmake/SPIRV-Headers/SPIRV-HeadersConfig.cmake ]; then
+  cmake -S SPIRV-Headers -B spirv-build -DSPIRV_HEADERS_ENABLE_TESTS=OFF -DCMAKE_INSTALL_PREFIX="$PWD/spirv-install" > /dev/null
+  cmake --install spirv-build > /dev/null
+fi
+
+# CPU threads: let the app choose (VS_THREADS), upstream uses half the cores
+if ! grep -q VS_THREADS qwentts.cpp/src/backend.h; then
+  sed -i 's|    int n = (int) std::thread::hardware_concurrency() / 2;|    const char * vs = std::getenv("VS_THREADS");\n    if (vs \&\& std::atoi(vs) > 0) return std::atoi(vs);\n    int n = (int) std::thread::hardware_concurrency() / 2;|' qwentts.cpp/src/backend.h
+  grep -q VS_THREADS qwentts.cpp/src/backend.h || { echo "patch failed"; exit 1; }
+  grep -q "<cstdlib>" qwentts.cpp/src/backend.h || sed -i '0,/#include/s//#include <cstdlib>\n#include/' qwentts.cpp/src/backend.h
+fi
 echo "done"

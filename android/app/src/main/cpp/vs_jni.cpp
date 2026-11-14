@@ -8,6 +8,11 @@
 #include <deque>
 
 #include "qwen.h"
+#include "ggml-backend.h"
+
+#include <dirent.h>
+#include <dlfcn.h>
+#include <cstdlib>
 
 extern "C" {
 #include "layer3.h"
@@ -43,16 +48,80 @@ static std::string jstr(JNIEnv * env, jstring s) {
     return r;
 }
 
+static std::mutex  g_be_mu;
+static std::string g_lib_dir, g_cpu_variant;
+static bool        g_vk_tried = false;
+
 extern "C" {
 
-JNIEXPORT jlong JNICALL Java_tw_rfps_voicestudio_Native_init(JNIEnv * env, jclass, jstring talker, jstring codec) {
+// Load the best CPU backend module for this phone (libggml-cpu-<variant>.so in the app's lib folder).
+// Must run before init(). Returns the variant file name, or "" when none could be loaded.
+JNIEXPORT jstring JNICALL Java_tw_rfps_voicestudio_Native_setup(JNIEnv * env, jclass, jstring libDir) {
+    std::lock_guard<std::mutex> lk(g_be_mu);
+    if (!g_cpu_variant.empty()) return env->NewStringUTF(g_cpu_variant.c_str());
+    ggml_log_set([](enum ggml_log_level lv, const char * m, void *) { if (lv >= GGML_LOG_LEVEL_WARN) VS_LOG("%s", m); }, nullptr);
+    g_lib_dir = jstr(env, libDir);
+    std::string best; int best_score = 0;
+    if (DIR * d = opendir(g_lib_dir.c_str())) {
+        while (struct dirent * e = readdir(d)) {
+            std::string n = e->d_name;
+            if (n.rfind("libggml-cpu-", 0) != 0 || n.size() < 4 || n.compare(n.size() - 3, 3, ".so") != 0) continue;
+            std::string path = g_lib_dir + "/" + n;
+            void * h = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+            if (!h) { VS_LOG("skip %s: %s", n.c_str(), dlerror()); continue; }
+            auto score = (int (*)(void)) dlsym(h, "ggml_backend_score");
+            int s = score ? score() : 0;
+            VS_LOG("cpu variant %s score %d", n.c_str(), s);
+            if (s > best_score) { best_score = s; best = n; }
+            dlclose(h);
+        }
+        closedir(d);
+    }
+    if (best.empty()) {  // no variants: a plain libggml-cpu.so
+        std::string path = g_lib_dir + "/libggml-cpu.so";
+        if (ggml_backend_load(path.c_str())) g_cpu_variant = "libggml-cpu.so";
+    } else if (ggml_backend_load((g_lib_dir + "/" + best).c_str())) {
+        g_cpu_variant = best;
+    }
+    return env->NewStringUTF(g_cpu_variant.c_str());
+}
+
+// Load the Vulkan backend (once) and list the GPUs: "Vulkan0\tdescription" per entry.
+JNIEXPORT jobjectArray JNICALL Java_tw_rfps_voicestudio_Native_gpus(JNIEnv * env, jclass) {
+    {
+        std::lock_guard<std::mutex> lk(g_be_mu);
+        if (!g_vk_tried) {
+            g_vk_tried = true;
+            std::string path = g_lib_dir + "/libggml-vulkan.so";
+            if (!ggml_backend_load(path.c_str())) VS_LOG("Vulkan backend not loaded");
+        }
+    }
+    std::vector<std::string> out;
+    for (size_t i = 0; i < ggml_backend_dev_count(); i++) {
+        ggml_backend_dev_t d = ggml_backend_dev_get(i);
+        enum ggml_backend_dev_type t = ggml_backend_dev_type(d);
+        if (t == GGML_BACKEND_DEVICE_TYPE_GPU || t == GGML_BACKEND_DEVICE_TYPE_IGPU) {
+            size_t fr = 0, tot = 0;
+            ggml_backend_dev_memory(d, &fr, &tot);
+            out.push_back(std::string(ggml_backend_dev_name(d)) + "\t" + ggml_backend_dev_description(d) + "\t" + std::to_string(tot >> 20));
+        }
+    }
+    jobjectArray arr = env->NewObjectArray((jsize) out.size(), env->FindClass("java/lang/String"), nullptr);
+    for (size_t i = 0; i < out.size(); i++) env->SetObjectArrayElement(arr, (jsize) i, env->NewStringUTF(out[i].c_str()));
+    return arr;
+}
+
+// device: "CPU" or a GPU name from gpus() (e.g. "Vulkan0"); threads: CPU threads, 0 = default (half the cores)
+JNIEXPORT jlong JNICALL Java_tw_rfps_voicestudio_Native_init(JNIEnv * env, jclass, jstring talker, jstring codec, jstring device, jint threads) {
     qt_log_set(log_cb, nullptr);
-    std::string t = jstr(env, talker), c = jstr(env, codec);
+    std::string t = jstr(env, talker), c = jstr(env, codec), dev = jstr(env, device);
+    if (dev.empty()) dev = "CPU";
+    if (threads > 0) setenv("VS_THREADS", std::to_string(threads).c_str(), 1); else unsetenv("VS_THREADS");
     struct qt_init_params p;
     qt_init_default_params(&p);
     p.talker_path = t.c_str();
     p.codec_path  = c.c_str();
-    p.device      = "CPU";
+    p.device      = dev.c_str();
     struct qt_context * q = qt_init(&p);
     return (jlong) (intptr_t) q;
 }

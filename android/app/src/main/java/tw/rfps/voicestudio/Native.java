@@ -5,8 +5,13 @@ public final class Native {
     static { System.loadLibrary("voicestudio"); }
     private Native() {}
 
-    /** Load a talker GGUF + codec GGUF. Returns a handle (0 on failure, see {@link #lastError()}). */
-    public static native long init(String talkerPath, String codecPath);
+    /** Load the best CPU backend for this phone from the app's native lib folder; call once before init(). Returns its file name ("" = failed). */
+    public static native String setup(String libDir);
+    /** Load the Vulkan backend (experimental) and list GPUs as "name\tdescription\tMiB". */
+    public static native String[] gpus();
+    /** Load a talker GGUF + codec GGUF on device ("CPU" or a name from gpus()) with that many CPU threads (0 = default).
+     *  Returns a handle (0 on failure, see {@link #lastError()}). */
+    public static native long init(String talkerPath, String codecPath, String device, int threads);
     public static native void free(long handle);
     public static native String lastError();
     public static native String recentLog();
