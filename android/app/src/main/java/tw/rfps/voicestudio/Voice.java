@@ -11,11 +11,13 @@ import java.util.Arrays;
  *       F0 is tracked with YIN (FFT difference function, 5 ms hop), pitch marks are placed on the
  *       glottal pulses of a zero-phase low-passed copy, unvoiced sounds are copied with a fixed 10 ms grain
  *       taken at the exact analysis time (no repeated grains, so no buzzy consonants).</li>
- *   <li>Formants (vocal-tract size): band-limited Kaiser-windowed sinc resampling before PSOLA; PSOLA then
- *       sets the pitch and the length, so the spectral envelope moves by exactly the formant factor.</li>
+ *   <li>Formants (vocal-tract size): inside the same PSOLA pass every grain is read `formant` times faster
+ *       (band-limited Kaiser-windowed sinc), which moves the spectral envelope; the grain spacing alone sets
+ *       the pitch. One pass, no FFT smearing. At pitch 1 / formant 1 / speed 1 the output equals the input.</li>
  *   <li>Growl: period doubling (every other pulse quieter) plus a little period jitter — the way a real
  *       rough voice sounds — instead of clipping distortion.</li>
- *   <li>Echo: feedback delay with a darkening filter in the loop (tape / room style repeats).</li>
+ *   <li>Echo: feedback delay with a darkening filter in the loop (tape / room style repeats), ducked under
+ *       the voice so the repeats do not blur the words.</li>
  *   <li>Reverb: 8-line feedback delay network (Householder matrix), input diffusers, frequency-dependent
  *       decay, pre-delay; dense and smooth instead of the ringing of a small Schroeder reverb.</li>
  *   <li>Output: DC removal, loudness levelling on the speech parts, look-ahead peak limiter.</li>
@@ -317,7 +319,6 @@ public final class Voice {
                 ts = next;
             }
         }
-        if (System.getProperty("vsdbg") != null) for (int i = 0; i < ns; i++) if (Math.abs(sSrc[i] - sPos[i]) > 2) { System.out.println("drift at " + i + " pos " + sPos[i] + " src " + sSrc[i] + " capL " + capL[i] + " capR " + capR[i] + (i > 0 ? " prev " + sPos[i - 1] + "/" + sSrc[i - 1] : "")); break; }
         // pass 2: overlap-add. At each junction between two synthesis marks (distance D) the outgoing and the
         // incoming grain cross-fade over the same stretch of length J = min(D, reach of both); the rest of D is
         // covered by flat window parts as far as each grain may reach. So the windows add up to exactly 1
@@ -488,32 +489,6 @@ public final class Voice {
         return y;
     }
 
-    /** Echo without ducking (comparison). */
-    public static float[] echoPlain(float[] x, int sr, double delayMs, double feedback, double mix) {
-        if (mix <= 0 || delayMs <= 0) return x;
-        double D = delayMs * sr / 1000.0;
-        feedback = Math.max(0, Math.min(0.85, feedback));
-        int repeats = feedback > 0 ? (int) Math.ceil(Math.log(0.01) / Math.log(feedback)) : 1;
-        int tail = (int) Math.min(sr * 2.5, D * Math.max(1, repeats) + sr * 0.05);
-        int n = x.length + tail;
-        float[] y = new float[n];
-        double[] buf = new double[n];
-        double lpA = Math.exp(-2 * Math.PI * 3200 / sr), hpA = Math.exp(-2 * Math.PI * 180 / sr);
-        double lp = 0, hpX = 0, hpY = 0;
-        for (int i = 0; i < n; i++) {
-            double in = i < x.length ? x[i] : 0;
-            double t = i - D;
-            double del = 0;
-            if (t >= 1) { int a = (int) t; double fr = t - a; del = buf[a] * (1 - fr) + buf[a + 1 < n ? a + 1 : a] * fr; }
-            lp = (1 - lpA) * del + lpA * lp;                 // darken
-            double hp = hpA * (hpY + lp - hpX);               // thin
-            hpX = lp; hpY = hp;
-            buf[i] = in + hp * feedback;
-            y[i] = (float) (in + mix * hp);
-        }
-        return y;
-    }
-
     // ================================================================ reverb (FDN)
     /** 8-line feedback delay network reverb (1.2 s low / 0.5 s high decay), ducked 60 % under the voice. mix 0..1. */
     public static float[] reverb(float[] x, int sr, double mix) { return reverb(x, sr, mix, 1.2, 0.6); }
@@ -568,6 +543,8 @@ public final class Voice {
             }
             wet[i] = w;
         }
+        // a vocal reverb return: low cut (2 x 280 Hz) so the tail stays airy instead of booming
+        wet = onePoleHp(onePoleHp(wet, sr, 280), sr, 280);
         // level: wet energy relative to the dry signal
         double ed = 0, ew = 0;
         for (int i = 0; i < x.length; i++) ed += x[i] * x[i];
@@ -616,7 +593,7 @@ public final class Voice {
     // ================================================================ output stage
     /**
      * DC removal, speech loudness levelling (RMS of the active 10 ms frames to targetDb, gain limited to
-     * -12..+12 dB), then a 3 ms look-ahead limiter at ceiling.
+     * -12..+12 dB), then a 3 ms look-ahead limiter at ceiling; inaudible tail ends are cut.
      */
     public static float[] finish(float[] x, int sr, double targetDb, float ceiling) {
         if (x.length == 0) return x;
@@ -663,6 +640,13 @@ public final class Voice {
             env = target < env ? target : target + (env - target) * rel;
             y[i] = (float) Math.max(-ceiling, Math.min(ceiling, d[i] * env));
         }
+        // drop the inaudible end of echo / reverb tails (below -50 dB), with a 60 ms fade
+        int end = y.length;
+        while (end > 0 && Math.abs(y[end - 1]) < ceiling * 0.00316) end--;
+        end = Math.min(y.length, end + (int) (0.08 * sr));
+        int fade = Math.min(end, (int) (0.06 * sr));
+        for (int i = 0; i < fade; i++) y[end - 1 - i] *= (float) i / fade;
+        if (end < y.length) y = Arrays.copyOf(y, end);
         return y;
     }
 }

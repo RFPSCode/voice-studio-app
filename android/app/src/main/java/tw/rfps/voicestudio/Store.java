@@ -104,7 +104,7 @@ public class Store {
         int n = dataLen / 2 / ch;
         float[] x = new float[n];
         for (int i = 0; i < n; i++) x[i] = bb.getShort(dataOff + i * 2 * ch) / 32768f;
-        return rate == SR ? x : Dsp.resample(x, (double) rate / SR);
+        return rate == SR ? x : Voice.resample(x, (double) rate / SR);
     }
 
     static String md5(String s) {
@@ -554,16 +554,10 @@ public class Store {
 
     public static float[] applyPost(float[] a, JSONObject post, double baseF0) {
         if (post == null || !post.optBoolean("enabled")) return a;
-        double target = num(post, "pitchHz", 0, 0, 500), lock = num(post, "pitchLock", 0.5, 0, 1);
         double formant = num(post, "formant", 1, 0.8, 1.4), speed = num(post, "speed", 1, 0.7, 1.3);
         double growl = num(post, "growl", 0, 0, 1);
         // target = pitchHz, or (pitchHz 0) the role's own typical pitch: pitchLock then only evens out the lines.
-        double ratio = 1;
-        double line = (target > 0 || lock > 0) ? Dsp.medianF0(a, SR) : 0;
-        double base = baseF0 > 0 ? baseF0 : line;
-        if (line <= 0) line = base;
-        double tgt = target > 0 ? target : base;
-        if (base > 0 && tgt > 0) ratio = Math.max(0.7, Math.min(1.6, tgt / (Math.pow(base, 1 - lock) * Math.pow(line, lock))));
+        double ratio = pitchRatio(a, post, baseF0);
         // 1) pitch + formants + speed + growl in one TD-PSOLA pass (see Voice)
         float[] y = (Math.abs(ratio - 1) > 1e-3 || Math.abs(formant - 1) > 1e-3 || Math.abs(speed - 1) > 1e-3 || growl > 0)
             ? Voice.change(a, SR, ratio, formant, speed, growl) : a.clone();
@@ -584,31 +578,6 @@ public class Store {
         y = Voice.reverb(y, SR, num(post, "reverb", 0, 0, 1));
         // 4) loudness levelling + look-ahead limiter (no clipping, every line about as loud)
         return Voice.finish(y, SR, -17, 0.89f);
-    }
-
-    public static float[] applyPostV1(float[] a, JSONObject post, double baseF0) {
-        if (post == null || !post.optBoolean("enabled")) return a;
-        double target = num(post, "pitchHz", 0, 0, 500), lock = num(post, "pitchLock", 0.5, 0, 1);
-        double formant = num(post, "formant", 1, 0.8, 1.4), speed = num(post, "speed", 1, 0.7, 1.3);
-        // target = pitchHz, or (pitchHz 0) the role's own typical pitch: pitchLock then only evens out the lines.
-        // Shifts are limited to about -6/+8 semitones; bigger shifts damage the words.
-        double ratio = 1;
-        double line = (target > 0 || lock > 0) ? Dsp.medianF0(a, SR) : 0;
-        double base = baseF0 > 0 ? baseF0 : line;
-        if (line <= 0) line = base;
-        double tgt = target > 0 ? target : base;
-        if (base > 0 && tgt > 0) ratio = Math.max(0.7, Math.min(1.6, tgt / (Math.pow(base, 1 - lock) * Math.pow(line, lock))));
-        float[] y = (Math.abs(ratio - 1) > 1e-3 || Math.abs(formant - 1) > 1e-3 || Math.abs(speed - 1) > 1e-3)
-            ? Dsp.childFx(a, SR, ratio, formant, speed) : a.clone();
-        y = Dsp.layer(y, SR, 0.5, 0.8, num(post, "octDown", 0, 0, 1));
-        y = Dsp.layer(y, SR, 2.0, 1.15, num(post, "octUp", 0, 0, 1) * 0.6);
-        y = Dsp.growl(y, SR, num(post, "growl", 0, 0, 1));
-        y = Dsp.shelf(y, SR, 220, num(post, "bassDb", 0, -12, 12), true);
-        y = Dsp.shelf(y, SR, 3800, num(post, "trebleDb", 0, -12, 12), false);
-        y = Dsp.tidy(y, SR);
-        y = Dsp.echo(y, SR, num(post, "echoMs", 0, 0, 800), num(post, "echoFeedback", 0.3, 0, 0.85), num(post, "echoMix", 0, 0, 1));
-        y = Dsp.reverb(y, SR, num(post, "reverb", 0, 0, 1));
-        return Dsp.peakNorm(y, 0.95f);
     }
 
     /** Fixed starting seed for a role, so every line of a character starts from the same voice. */

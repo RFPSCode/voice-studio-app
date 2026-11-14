@@ -1,7 +1,7 @@
-name: DSP eval (old vs new post-processing)
+name: DSP eval (post-processing quality)
 
-# Post-processes the takes in the dsp-samples branch with the previous and the current algorithm and
-# scores them: UTMOS (predicted naturalness, 1..5), DNSMOS and whisper character error rate.
+# Post-processes the takes in the dsp-samples branch (model-test with push=yes) like the phone and
+# scores clean vs processed: UTMOS (predicted naturalness, 1..5), DNSMOS and whisper character error rate.
 on:
   workflow_dispatch:
 
@@ -18,8 +18,8 @@ jobs:
       - name: Process
         run: |
           curl -sSL -o json.jar https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar
-          mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/{Dsp,Voice,Store,Pron}.java scripts/DspAB.java
-          mkdir -p ab && java -cp cls:json.jar DspAB examples/校園安全時光機.voiceproj.json takes ab
+          mkdir -p cls && javac -encoding UTF-8 -cp json.jar -d cls android/app/src/main/java/tw/rfps/voicestudio/{Dsp,Voice,Store,Pron}.java scripts/DspEval.java
+          mkdir -p ab && java -cp cls:json.jar DspEval examples/校園安全時光機.voiceproj.json takes ab
       - name: Score
         run: |
           pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cpu
@@ -44,7 +44,7 @@ jobs:
               ap2 = np.array([np.interp(fr / a, fr, row) for row in ap])
               y = pw.synthesize(f0 * prm['ratio'], sp2, ap2, sr, 5)
               sf.write(f.replace('_0clean', '_6world'), (y / max(1e-6, np.abs(y).max()) * 0.8).astype(np.float32), sr, subtype='PCM_16')
-          keys = ['0clean', '1old', '2new']
+          keys = ['0clean', '2new']
           tot = {k: {'utmos': [], 'dns': [], 'cer': []} for k in keys}
           def han(t): return re.sub(r'[^一-鿿]', '', t)
           for b in sorted(set(f.rsplit('_', 1)[0] for f in glob.glob('ab/*_0clean.wav'))):
