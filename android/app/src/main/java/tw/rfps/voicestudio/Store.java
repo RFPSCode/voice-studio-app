@@ -542,6 +542,9 @@ public class Store {
      * pitch/formant/speed → octave layers → growl → bass/treble → loudness → echo → reverb.
      * baseF0 = the role's typical pitch; pitchLock 0 keeps each line's own pitch relative to it, 1 makes every line hit pitchHz.
      */
+    /** Version of the post-processing algorithms: changing it marks every processed line for re-processing. */
+    static final String POST_ALGO = "psola2|";
+
     /** The pitch ratio applyPost uses for a line (target / role pitch with pitchLock), limited to 0.7..1.6. */
     public static double pitchRatio(float[] a, JSONObject post, double baseF0) {
         double target = num(post, "pitchHz", 0, 0, 500), lock = num(post, "pitchLock", 0.5, 0, 1);
@@ -603,7 +606,7 @@ public class Store {
         float[] o = applyPost(a, post, post.optBoolean("enabled") ? roleBaseF0(id, role) : 0);
         writeWav(outFile(id, lid), o);
         s.put("dur", Math.round(o.length * 100.0 / SR) / 100.0);
-        s.put("postSig", md5(post.toString()) + ":" + s.getInt("chosen"));
+        s.put("postSig", md5(POST_ALGO + post.toString()) + ":" + s.getInt("chosen"));
         saveState(id, st);
     }
 
@@ -643,7 +646,7 @@ public class Store {
         for (int i = 0; i < lines.length(); i++) {
             JSONObject l = lines.getJSONObject(i), s = st.getJSONObject("lines").optJSONObject(l.getString("id"));
             if (s == null || s.optInt("chosen", -1) < 0) continue;
-            if (!(md5(postOf(p, st, l.optString("role")).toString()) + ":" + s.getInt("chosen")).equals(s.optString("postSig"))) n++;
+            if (!(md5(POST_ALGO + postOf(p, st, l.optString("role")).toString()) + ":" + s.getInt("chosen")).equals(s.optString("postSig"))) n++;
         }
         return n;
     }
@@ -658,7 +661,7 @@ public class Store {
             JSONObject l = lines.getJSONObject(i);
             JSONObject s = st.getJSONObject("lines").optJSONObject(l.getString("id"));
             if (s == null || s.optInt("chosen", -1) < 0) continue;
-            String want = md5(postOf(p, st, l.optString("role")).toString()) + ":" + s.getInt("chosen");
+            String want = md5(POST_ALGO + postOf(p, st, l.optString("role")).toString()) + ":" + s.getInt("chosen");
             if (want.equals(s.optString("postSig")) && outFile(id, l.getString("id")).exists()) continue;
             postLine(id, l.getString("id"));
             n++;
