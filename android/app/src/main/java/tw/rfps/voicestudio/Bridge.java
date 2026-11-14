@@ -44,6 +44,8 @@ public class Bridge {
         try (InputStream in = act.getAssets().open("models.json")) { cat = new String(Store.readAll(in), StandardCharsets.UTF_8); }
         models = new Models(new File(act.getFilesDir(), "models"), cat);
         prefs = act.getSharedPreferences("vs", 0);
+        try (InputStream in = act.getAssets().open("pron.json")) { Store.pron = new Pron(new String(Store.readAll(in), StandardCharsets.UTF_8)); }
+        catch (Exception e) { Store.pron = null; }
     }
 
     // ------------------------------------------------------------ events to JS
@@ -272,6 +274,23 @@ public class Bridge {
             emit("log", "msg", "✓ 已重新後製 " + n + " 句");
             emit("refresh");
         });
+    }
+
+    /** Phone-side 注音 fix for a word (empty zhuyin = remove). Returns "ok" or an error message. */
+    @JavascriptInterface
+    public String setPron(String pid, String from, String zhuyin) {
+        try { store.setPron(pid, from, zhuyin); emit("refresh"); return "ok"; } catch (Exception e) { return String.valueOf(e.getMessage()); }
+    }
+
+    /** Preview what the model would get for a text (for the 注音 dialog). */
+    @JavascriptInterface
+    public String previewText(String pid, String text) {
+        try {
+            JSONObject p = store.project(pid), st = store.state(pid);
+            JSONObject l = new JSONObject().put("id", "x").put("role", "").put("text", text);
+            Pron.Result r = Store.modelOf(p, st, l);
+            return r.text;
+        } catch (Exception e) { return String.valueOf(e.getMessage()); }
     }
 
     @JavascriptInterface

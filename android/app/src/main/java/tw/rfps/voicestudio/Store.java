@@ -147,6 +147,13 @@ public class Store {
                 if (sp < 0.7 || sp > 1.3) err.add("角色 " + id + " 的 speed 超出範圍 0.7–1.3");
             }
         }
+        JSONArray prn = p.optJSONArray("pronunciation");
+        if (prn != null) for (int i = 0; i < prn.length(); i++) {
+            JSONObject e = prn.optJSONObject(i);
+            if (e == null || e.optString("from").isEmpty()) { err.add("pronunciation[" + i + "] 缺少 from"); continue; }
+            if (!e.optString("zhuyin").isEmpty() && pron != null && pron.zhuyinToPinyin(e.optString("zhuyin")) == null)
+                err.add("發音修正「" + e.optString("from") + "」的注音看不懂：" + e.optString("zhuyin"));
+        }
         Map<String, String> ids = new LinkedHashMap<>(), keys = new LinkedHashMap<>();
         for (int i = 0; i < lines.length(); i++) {
             JSONObject l = lines.optJSONObject(i);
@@ -159,7 +166,7 @@ public class Store {
             String text = l.optString("text");
             if (text.trim().isEmpty()) err.add("句子 " + id + " 的 text 是空的");
             if (text.length() > 300) err.add("句子 " + id + " 太長（超過 300 字）");
-            String say = sayOf(p, l);
+            String say = Pron.stripAnnotations(sayOf(p, l));
             if (say.matches(".*[<\\[][^>\\]]{1,20}[>\\]].*")) err.add("句子 " + id + " 的文字裡有 <…> 或 […] 標記，模型會照唸");
             String k = keyOf(p, l);
             if (keys.containsKey(k) && !sameVoice(p, l, ids.get(keys.get(k)))) err.add("句子 " + id + " 的 key 和 " + keys.get(k) + " 重複");
@@ -185,9 +192,37 @@ public class Store {
         JSONArray pr = p.optJSONArray("pronunciation");
         if (pr != null) for (int i = 0; i < pr.length(); i++) {
             JSONObject e = pr.optJSONObject(i);
-            if (e != null && !e.optString("from").isEmpty()) s = s.replace(e.optString("from"), e.optString("to"));
+            if (e != null && !e.optString("from").isEmpty() && e.has("to") && e.optString("zhuyin").isEmpty()) s = s.replace(e.optString("from"), e.optString("to"));
         }
         return s.trim();
+    }
+
+    /** Pronunciation data (assets/pron.json); null = only remove 注音 annotations. */
+    public static volatile Pron pron;
+
+    /** Project pronunciation entries + the ones added on the phone (state.pronunciation). */
+    public static JSONArray pronOf(JSONObject p, JSONObject st) {
+        JSONArray out = new JSONArray();
+        for (JSONArray a : new JSONArray[]{p.optJSONArray("pronunciation"), st != null ? st.optJSONArray("pronunciation") : null})
+            if (a != null) for (int i = 0; i < a.length(); i++) if (a.optJSONObject(i) != null) out.put(a.optJSONObject(i));
+        return out;
+    }
+
+    /** Text without 「{注音}」 annotations (subtitles, length checks). */
+    public static String plainOf(JSONObject p, JSONObject l) { return Pron.stripAnnotations(sayOf(p, l)); }
+
+    /** What is actually sent to the model (spec §2.5): 注音 → characters, Taiwan readings, simplified characters. */
+    public static Pron.Result modelOf(JSONObject p, JSONObject st, JSONObject l) {
+        String s = sayOf(p, l);
+        JSONArray extra = st != null ? st.optJSONArray("pronunciation") : null;
+        if (extra != null) for (int i = 0; i < extra.length(); i++) {      // phone-side plain replacements
+            JSONObject e = extra.optJSONObject(i);
+            if (e != null && !e.optString("from").isEmpty() && e.has("to") && e.optString("zhuyin").isEmpty()) s = s.replace(e.optString("from"), e.optString("to"));
+        }
+        Pron pr = pron;
+        if (pr == null) return new Pron.Result(Pron.stripAnnotations(s), new ArrayList<Pron.Change>(), "");
+        JSONObject e = p.optJSONObject("engine");
+        return pr.convert(s, pronOf(p, st), e == null || e.optBoolean("taiwan", true));
     }
 
     public static JSONObject roleOf(JSONObject p, String id) {
@@ -232,7 +267,7 @@ public class Store {
         JSONObject e = p.optJSONObject("engine");
         String lang = e != null ? e.optString("language", "chinese") : "chinese";
         boolean clean = e == null || e.optBoolean("clean", true);
-        return md5(sayOf(p, l) + "\u0001" + speakerOf(p, st, l.optString("role")) + "\u0001" + instructOf(p, l) + "\u0001" + lang + "\u0001" + model + (clean ? "\u0001c2" : ""));
+        return md5(modelOf(p, st, l).text + "\u0001" + speakerOf(p, st, l.optString("role")) + "\u0001" + instructOf(p, l) + "\u0001" + lang + "\u0001" + model + (clean ? "\u0001c2" : ""));
     }
 
     // ------------------------------------------------------------------ projects
@@ -308,7 +343,13 @@ public class Store {
             r.put("id", l.getString("id"));
             r.put("role", l.optString("role"));
             r.put("text", l.optString("text"));
-            r.put("say", sayOf(p, l));
+            r.put("say", plainOf(p, l));
+            Pron.Result mr = modelOf(p, st, l);
+            r.put("model", mr.text);
+            JSONArray chg = new JSONArray();
+            for (Pron.Change c : mr.changes) chg.put(new JSONObject().put("from", c.from).put("zhuyin", c.zhuyin).put("to", c.to).put("kind", c.kind));
+            r.put("changes", chg);
+            r.put("poly", mr.poly);
             r.put("instruct", instructOf(p, l));
             r.put("note", l.optString("note"));
             String status = "todo";
@@ -342,6 +383,7 @@ public class Store {
         res.put("posts", posts);
         res.put("speakers", speakers);
         res.put("stalePost", countStalePost(p, st, id));
+        res.put("phonePron", st.optJSONArray("pronunciation") != null ? st.optJSONArray("pronunciation") : new JSONArray());
         return res;
     }
 
@@ -376,7 +418,7 @@ public class Store {
                 if (s != null && sig.equals(s.optString("sig")) && s.optInt("chosen", -1) >= 0 && outFile(id, lid).exists()) continue;
             } else if (!only.contains(lid)) continue;
             String role = l.optString("role"), speaker = speakerOf(p, st, role);
-            String text = sayOf(p, l), ins = instructOf(p, l);
+            String text = modelOf(p, st, l).text, shown = plainOf(p, l), ins = instructOf(p, l);
             if (eng.optBoolean("clean", true)) ins = ins.isEmpty() ? CLEAN_INSTRUCT : ins + "；" + CLEAN_INSTRUCT;
             boolean fresh = s == null || !sig.equals(s.optString("sig"));
             JSONArray tk = fresh || s.optJSONArray("takes") == null ? new JSONArray() : s.getJSONArray("takes");
@@ -395,9 +437,9 @@ public class Store {
                         r = engine.synth(text, lang, speaker, ins, seed < 0 ? -1 : seed + 104729L * attempt, temp, topP);
                     } catch (Exception e) { err = String.valueOf(e.getMessage()); break; }
                     if (r == null) { err = "沒有產生聲音"; break; }
-                    r = Dsp.tidy(Dsp.cleanSpeech(r, SR, maxPause(text)), SR);
+                    r = Dsp.tidy(Dsp.cleanSpeech(r, SR, maxPause(shown)), SR);
                     double d = r.length / (double) SR;
-                    boolean o = oddLength(text, d);
+                    boolean o = oddLength(shown, d);
                     if (a == null || !o) { a = r; dur = d; odd = o; }
                     if (o) pr.line(id, lid, "retry", new JSONObject().put("dur", d));
                 }
@@ -612,6 +654,19 @@ public class Store {
         return n;
     }
 
+    /** Add (or replace) a phone-side 注音 fix: {from, zhuyin}. Empty zhuyin removes it. */
+    public void setPron(String id, String from, String zhuyin) throws Exception {
+        JSONObject st = state(id);
+        JSONArray a = st.optJSONArray("pronunciation"), b = new JSONArray();
+        if (a != null) for (int i = 0; i < a.length(); i++) if (!a.getJSONObject(i).optString("from").equals(from)) b.put(a.getJSONObject(i));
+        if (zhuyin != null && !zhuyin.trim().isEmpty()) {
+            if (pron != null && pron.zhuyinToPinyin(zhuyin) == null) throw new IllegalArgumentException("看不懂這個注音：" + zhuyin);
+            b.put(new JSONObject().put("from", from).put("zhuyin", zhuyin.trim()));
+        }
+        st.put("pronunciation", b);
+        saveState(id, st);
+    }
+
     /** Speaker chosen on the phone; empty = back to the project file's speaker. */
     public void setRoleSpeaker(String id, String role, String speaker) throws Exception {
         JSONObject st = state(id);
@@ -630,7 +685,7 @@ public class Store {
         JSONObject line = null;
         JSONArray lines = p.getJSONArray("lines");
         for (int i = 0; i < lines.length() && line == null; i++) if (lines.getJSONObject(i).optString("role").equals(role)) line = lines.getJSONObject(i);
-        String text = line != null ? sayOf(p, line) : "你好，很高興認識你。";
+        String text = line != null ? modelOf(p, state(id), line).text : "你好，很高興認識你。";
         String ins = line != null ? instructOf(p, line) : p.optString("instruct");
         if (eng.optBoolean("clean", true)) ins = ins.isEmpty() ? CLEAN_INSTRUCT : ins + "；" + CLEAN_INSTRUCT;
         File raw = new File(new File(dir(id), "audition"), role + "_" + speaker + "_" + md5(text + ins) + ".wav");

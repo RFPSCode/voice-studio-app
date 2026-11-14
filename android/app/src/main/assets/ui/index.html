@@ -114,10 +114,12 @@ pre{white-space:pre-wrap;font-size:11.5px;background:#1b1d3a;color:#d6d4ff;borde
    <button class="b green" onclick="VS.export(P,false)">⬇ 匯出到下載資料夾</button>
    <button class="b gray" onclick="VS.export(P,true)">↗ 分享</button>
   </div>
+  <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">🔤 讀音修正（<span id="pronN">0</span>）</summary><div id="pronList" class="hint"></div>
+   <div class="row" style="margin-top:6px"><button class="b sm gray" onclick="pronDlg('')">＋ 新增讀音修正</button></div></details>
   <div class="hint" style="margin-top:8px">匯出檔案：手機的「Download/語音工作室/<span class="pid"></span>/」裡的 all.txt 和 map.txt，放進遊戲的 voice/ 資料夾或用遊戲的「匯入語音」。</div>
  </div>
  <div class="filters" id="filters">
-  <button data-f="" class="on">全部</button><button data-f="todo">未錄</button><button data-f="changed">已修改</button><button data-f="odd">可能有問題</button><button data-f="done">完成</button>
+  <button data-f="" class="on">全部</button><button data-f="todo">未錄</button><button data-f="changed">已修改</button><button data-f="odd">可能有問題</button><button data-f="poly">多音字</button><button data-f="done">完成</button>
  </div>
  <div id="lines"></div>
 </section>
@@ -153,6 +155,17 @@ pre{white-space:pre-wrap;font-size:11.5px;background:#1b1d3a;color:#d6d4ff;borde
 
 <div id="dock"><div class="r"><b id="dName">待命中</b><div class="bar"><i id="dBar"></i></div><button class="b sm red hide" id="dStop" onclick="VS.cancel()">停止</button></div><div class="msg" id="dMsg">　</div></div>
 <audio id="aud"></audio>
+<div id="pd" class="hide" style="position:fixed;inset:0;background:rgba(10,12,40,.55);z-index:20;display:flex;align-items:center;justify-content:center;padding:14px">
+ <div class="card" style="width:100%;max-width:460px;margin:0">
+  <h3>🔤 讀音修正</h3>
+  <div class="hint" id="pdLine"></div>
+  <label class="hint">要修正的字或詞</label><input type="text" id="pdFrom" placeholder="例如：縫">
+  <label class="hint" style="margin-top:6px;display:block">正確的注音（可以用空白隔開每個字）</label><input type="text" id="pdZy" placeholder="例如：ㄈㄥˊ">
+  <div class="row" style="margin:6px 0;gap:4px;flex-wrap:wrap" id="pdKeys"></div>
+  <div class="hint" id="pdPrev"></div>
+  <div class="row" style="margin-top:10px"><button class="b sm green" onclick="pronSave()">儲存</button><button class="b sm gray" onclick="pdClose()">取消</button></div>
+  <div class="hint" style="margin-top:6px">儲存後，有這個詞的句子會標成「已修改」，按「一鍵完成」就會重錄。</div>
+ </div></div>
 
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -203,23 +216,40 @@ function renderRec(){
  $('#recTitle').textContent=S.project.title;$$('.pid').forEach(e=>e.textContent=P);
  $('#recStat').innerHTML=`完成 <b>${S.done}</b> / ${S.total}${S.changed?`　<span class="badge s-changed">已修改 ${S.changed}</span>`:''}`;
  $('#recBar').style.width=(S.total?S.done/S.total*100:0)+'%';
+ const pp=S.phonePron||[];$('#pronN').textContent=pp.length;$('#pronList').innerHTML=pp.map(e=>`<div class="row" style="margin-top:4px">${esc(e.from)}　${esc(e.zhuyin)}<button class="b sm gray" onclick="pronDel('${esc(e.from)}')">刪除</button></div>`).join('')||'（還沒有。句子旁邊的「🔤 讀音」可以新增）';
  const todo=S.lines.filter(l=>l.status!=='done').length;$('#oneHint').textContent=(todo||S.stalePost)?`還有 ${todo} 句要錄、${S.stalePost||0} 句要重新後製。完成後自動匯出到下載資料夾。`:'全部完成。再按一次會直接重新匯出。';$('#btnGen').textContent=todo?`▶ 產生未完成的 ${todo} 句`:'✓ 全部完成';$('#btnGen').disabled=!todo;
  $$('#filters button').forEach(b=>b.classList.toggle('on',b.dataset.f===FILT));
- const L=S.lines.filter(l=>!FILT||(FILT==='odd'?isOdd(l):l.status===FILT));
+ const L=S.lines.filter(l=>!FILT||(FILT==='odd'?isOdd(l):FILT==='poly'?!!l.poly:l.status===FILT));
  $('#lines').innerHTML=L.length?L.map(lineCard).join(''):'<div class="empty">沒有符合的句子</div>';
 }
 function lineCard(l){
  const st=RUN[l.id]||l.status,cls={todo:'s-todo',done:'s-done',changed:'s-changed',running:'s-run'}[st]||'s-todo',lab={todo:'未錄',done:'完成',changed:'已修改，需重錄',running:'產生中…'}[st]||st;
  const tk=(l.takes||[]).map(t=>`<button class="tk ${t.k===l.chosen?'on':''} ${t.odd?'odd':''}" onclick="pickTake('${l.id}',${t.k})" title="${t.odd?'長度不太正常，可能唸錯':''}">版本${t.k+1}　${t.dur}s${t.odd?' ⚠':''}</button>`).join('');
  return `<div class="card line" id="L_${l.id}"><div class="top"><span class="who">${esc(roleName(l.role))}</span><span class="id">#${esc(l.id)}</span><span style="flex:1"></span><span class="badge ${cls}">${lab}</span></div>
-  <div class="tx">${esc(l.text)}</div>${l.say!==l.text?`<div class="say">唸：${esc(l.say)}</div>`:''}<div class="ins">🎭 ${esc(l.instruct)||'（沒有指令）'}</div>${l.note?`<div class="ins">📝 ${esc(l.note)}</div>`:''}
+  <div class="tx">${esc(l.text)}</div>${l.say!==l.text?`<div class="say">唸：${esc(l.say)}</div>`:''}
+  <div class="ins">🔤 送進模型：${esc(l.model||'')}</div>
+  ${(l.changes||[]).length?`<div class="ins">${l.changes.map(c=>`<span class="badge s-changed" style="font-weight:400">${esc(c.from)} ${esc(c.zhuyin)}（${c.kind}）</span>`).join(' ')}</div>`:''}
+  ${l.poly?`<div class="ins">⚠ 多音字：${esc(l.poly)}，聽一下唸得對不對</div>`:''}
+  <div class="ins">🎭 ${esc(l.instruct)||'（沒有指令）'}</div>${l.note?`<div class="ins">📝 ${esc(l.note)}</div>`:''}
   ${tk?`<div class="takes">${tk}</div>`:''}
   <div class="row" style="margin-top:8px">${l.chosen>=0?`<button class="b sm green" onclick="play(fileUrl('projects/${P}/out/${l.id}.wav'))">▶ 播放</button>`:''}
-   <button class="b sm blue" onclick="more('${l.id}')">${(l.takes||[]).length?'＋ 再產生 2 個版本':'▶ 產生這句'}</button></div></div>`;
+   <button class="b sm blue" onclick="more('${l.id}')">${(l.takes||[]).length?'＋ 再產生 2 個版本':'▶ 產生這句'}</button>
+   <button class="b sm gray" onclick="pronDlg('${l.id}')">🔤 讀音</button></div></div>`;
 }
 function pickTake(lid,k){play(fileUrl(`projects/${P}/takes/${lid}_${k}.wav`));const r=VS.choose(P,lid,k);if(r!=='ok')toast(r);else{S=J(VS.summary(P));renderRec();}}
 function more(lid){const l=S.lines.find(x=>x.id===lid);VS.generate(P,JSON.stringify([lid]),(l.takes||[]).length?2:1);}
 function genAll(){VS.generate(P,'',1);}
+// ---- 讀音修正 (注音 -> characters the model reads correctly)
+const ZY='ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄧㄨㄩㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦ';let pdLine='';
+function pronDlg(lid){pdLine=lid;const l=lid&&S.lines.find(x=>x.id===lid);$('#pdLine').textContent=l?('#'+l.id+'　'+l.text):'';$('#pdFrom').value=l&&l.poly?l.poly[0]:'';$('#pdZy').value='';
+ $('#pdKeys').innerHTML=[...ZY,'ˊ','ˇ','ˋ','˙','␣','⌫'].map(k=>`<button class="tk" style="padding:3px 7px" data-k="${k}">${k}</button>`).join('');
+ $$('#pdKeys button').forEach(b=>b.onclick=()=>{const k=b.dataset.k,i=$('#pdZy');i.value=k==='⌫'?i.value.slice(0,-1):i.value+(k==='␣'?' ':k);pdPrev();});
+ $('#pdFrom').oninput=$('#pdZy').oninput=pdPrev;pdPrev();$('#pd').classList.remove('hide');}
+function pdClose(){$('#pd').classList.add('hide');}
+function pdPrev(){const f=$('#pdFrom').value.trim(),z=$('#pdZy').value.trim();const l=pdLine&&S.lines.find(x=>x.id===pdLine);
+ if(!f||!z){$('#pdPrev').textContent='';return;}const t=l?l.say:f;$('#pdPrev').textContent='送進模型會變成：'+VS.previewText(P,t.split(f).join(f+'{'+z+'}'));}
+function pronSave(){const f=$('#pdFrom').value.trim(),z=$('#pdZy').value.trim();if(!f||!z){alert('請填字詞和注音');return;}const r=VS.setPron(P,f,z);if(r!=='ok'){alert(r);return;}pdClose();toast('已加入讀音修正：'+f+' '+z);}
+function pronDel(f){if(confirm('刪除「'+f+'」的讀音修正？'))VS.setPron(P,f,'');}
 function regenAll(){if(confirm('全部 '+S.total+' 句重新產生？會花比較久的時間（原本的版本會保留，可以再選回來）。'))VS.regenerate(P,JSON.stringify(S.lines.map(l=>l.id)));}
 $$('#filters button').forEach(b=>b.onclick=()=>{FILT=b.dataset.f;renderRec();});
 

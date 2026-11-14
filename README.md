@@ -10,6 +10,7 @@
 ```
 
 - 語音模型：**Qwen3-TTS 1.7B CustomVoice**（阿里通義千問，Apache 2.0，可商用），9 種內建音色，用中文指令控制情緒。
+- 台灣讀音：自動轉簡體再送進模型、常用詞改成台灣讀音（星期、垃圾、學姊…），唸錯的字標注音就能修正（例如「縫 ㄈㄥˊ」）。
 - 乾淨語音：自動去除喘氣、雜音和過長的停頓，長度不對自動重錄，語音長度和遊戲字幕同步。
 - 完全離線：模型第一次開啟 App 時下載（約 2.4 GB），之後不需要網路、沒有額度限制。
 - 不需要任何人錄參考聲音。每個角色固定一個音色，角色感用手機上的「後製」做：男童、女童、可愛女聲、渾厚男聲、一般女聲、一般男聲、惡魔、天使，或自訂（音高、音高統一、共振峰、語速、疊音、沙啞、低音高音、回聲、殘響）。
@@ -21,6 +22,7 @@
 | `docs/語音專案規格書.md` | **給以後寫程式用的規格書**：專案檔格式、輸出格式、播放範例、驗證清單 |
 | `docs/voiceproj.schema.json` | 專案檔的 JSON Schema |
 | `examples/校園安全時光機.voiceproj.json` | 完整範例（83 句、9 個角色） |
+| `pc/pron-data.js` | 讀音資料（編輯器用，和 App 的 `assets/pron.json` 相同；由 `scripts/build_pron_data.sh` 產生） |
 | `pc/語音專案編輯器.html` | 電腦上用瀏覽器開啟：建立、編輯、檢查專案檔；可匯入舊版 Gemini 語音工具的 script.json／voices.json |
 | `android/` | App 原始碼（Java＋WebView 介面＋C++ 推論引擎） |
 | `.github/workflows/build-apk.yml` | GitHub 自動編譯 APK |
@@ -69,4 +71,5 @@ cd android && gradle assembleRelease  # 需要 JDK 17、Android SDK 35、NDK 27.
 - [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)：Apache 2.0（模型不包含在 App 內，使用時下載）
 - [qwentts.cpp](https://github.com/ServeurpersoCom/qwentts.cpp)：MIT
 - [shine](https://github.com/toots/shine) MP3 編碼器：LGPL 2.0
+- 讀音資料：[OpenCC](https://github.com/BYVoid/OpenCC)（Apache 2.0）繁簡轉換；台灣讀音取自 [libchewing-data](https://github.com/chewing/libchewing-data)（LGPL 2.1），並以教育部《重編國語辭典修訂本》（[萌典資料](https://github.com/g0v/moedict-data)，CC BY-ND 3.0 TW）核對；大陸讀音 [pypinyin](https://github.com/mozillazg/python-pinyin)（MIT）
 - App 簽章金鑰 `android/app/voicestudio.keystore` 是公開的（方便自動編譯與覆蓋安裝），只適合個人／教學使用。

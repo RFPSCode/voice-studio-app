@@ -53,6 +53,7 @@ code{background:#eeeaf8;border-radius:5px;padding:1px 5px}
    <div><label class="f">名稱 title</label><input id="ptitle"></div>
    <div><label class="f">語言</label><select id="plang"><option value="chinese">中文 chinese</option><option value="english">英文 english</option><option value="japanese">日文 japanese</option><option value="korean">韓文 korean</option><option value="auto">自動 auto</option></select></div>
    <div><label class="f">變化程度 temperature（0.8 建議）</label><input id="ptemp" type="number" step="0.05" min="0" max="1.5"></div>
+   <div><label class="f">台灣讀音</label><label class="row" style="font-size:14px"><input type="checkbox" id="ptw" style="width:auto"> 常用詞改成台灣讀音（星期、垃圾…）</label></div>
   </div>
   <div style="margin-top:8px"><label class="f">說明 description</label><input id="pdesc"></div>
   <div style="margin-top:8px"><label class="f">全部句子共用的指令 instruct</label><input id="pins" placeholder="用台灣口音的國語說話，咬字清楚自然"></div>
@@ -80,14 +81,44 @@ code{background:#eeeaf8;border-radius:5px;padding:1px 5px}
  </div>
 
  <div class="card">
-  <h2>發音修正<span style="flex:1"></span><button class="b sm gray" onclick="P.pronunciation.push({from:'',to:''});renderPron()">＋ 一行</button></h2>
-  <div class="hint">每一句要唸的文字裡，把左邊換成右邊（同音字），只影響語音、不影響畫面。</div>
+  <h2>發音修正<span style="flex:1"></span><button class="b sm gray" onclick="P.pronunciation.push({from:'',zhuyin:''});renderPron()">＋ 一行</button></h2>
+  <div class="hint">模型唸錯的字詞，填上正確的<b>注音</b>就好（例如「縫 ㄈㄥˊ」），程式會自動換成模型一定會這樣唸的字；也可以在唸法裡直接寫「縫{ㄈㄥˊ}」。<br>
+  另外會自動處理兩件事：①全部轉成簡體字再送進模型（繁體字比較容易唸錯，例如籃、腳）；②台灣和大陸讀音不同的常用詞，自動改成台灣讀音（例如星期 ㄒㄧㄥ ㄑㄧˊ、垃圾 ㄌㄜˋ ㄙㄜˋ、學姊 ㄐㄧㄝˇ）。不想用台灣讀音可以在專案設定關掉。只影響語音、不影響畫面。</div>
   <table><tbody id="pron"></tbody></table>
  </div>
  <div class="card hint">規格書：<code>docs/語音專案規格書.md</code>。產生好的 <code>.voiceproj.json</code> 用 LINE／雲端硬碟／USB 傳到手機，在「語音工作室」App 按「匯入專案檔」。</div>
 </main>
+<script src="pron-data.js"></script>
 <script>
 const $=s=>document.querySelector(s);
+// ===== 讀音處理：和 App（Pron.java）同一套規則 — 注音 → 字、台灣讀音、轉簡體 =====
+const PR=window.PRON||null;let MAXZY=1;if(PR)for(const k in PR.zy2py)MAXZY=Math.max(MAXZY,k.length);
+const isHan=c=>/[㐀-䶿一-鿿]/.test(c);
+function zy2py(zy){if(!PR)return null;const s=zy.replace(/ˉ/g,'').replace(/　/g,' ').trim();const out=[];let i=0;
+ while(i<s.length){if(s[i]===' '){i++;continue;}let hit=null,bl=0;for(let l=Math.min(MAXZY,s.length-i);l>=1;l--){let part=s.substr(i,l),key=part;if(part.endsWith('˙'))key='˙'+part.slice(0,-1);if(PR.zy2py[key]){hit=PR.zy2py[key];bl=l;break;}}
+  if(!hit)return null;out.push(hit);i+=bl;}return out;}
+function pronConvert(text,entries,taiwan){
+ const ch=[];if(!PR)return{text:text.replace(/\{[^{}]*\}/g,''),changes:ch,poly:''};
+ (entries||[]).forEach(e=>{if(e&&e.from&&e.zhuyin)text=text.split(e.from).join(e.from+'{'+e.zhuyin+'}');});
+ const segs=[];let plain='',i=0;
+ while(i<text.length){const c=text[i];if(c==='{'){const j=text.indexOf('}',i);if(j>i){const zy=text.slice(i+1,j),py=zy2py(zy),n=py?py.length:0;let k=plain.length,got=0;
+    while(k>0&&got<n){k--;if(isHan(plain[k]))got++;else if(!/\s/.test(plain[k])){k++;break;}}
+    if(py&&got===n&&n>0){const orig=plain.slice(k).replace(/\s/g,'');let rep='',ok=orig.length===py.length;
+     for(let q=0;ok&&q<py.length;q++){const sc=PR.ts[orig[q]]||orig[q];const r=PR.r1&&PR.r1[sc]===py[q]?sc:PR.py2ch[py[q]];if(!r){ok=false;break;}rep+=r;}
+     if(ok){if(k>0)segs.push(plain.slice(0,k));segs.push([rep]);ch.push({from:orig,zhuyin:zy.trim(),to:rep,kind:'注音'});plain='';i=j+1;continue;}}
+    i=j+1;continue;}}
+  plain+=c;i++;}
+ if(plain)segs.push(plain);let out='';
+ for(const o of segs){if(Array.isArray(o)){out+=o[0];continue;}let p=0;const s=o;
+  while(p<s.length){let hit=null;if(taiwan)for(let l=Math.min(4,s.length-p);l>=1;l--){const w=s.substr(p,l);if(PR.tw[w]){hit=w;break;}}
+   if(hit){out+=PR.tw[hit];ch.push({from:hit,zhuyin:PR.twZhuyin[hit],to:PR.tw[hit],kind:'台灣讀音'});p+=hit.length;continue;}
+   let ph=null;for(let l=Math.min(6,s.length-p);l>=2;l--){const w=s.substr(p,l);if(PR.tsp[w]){ph=w;break;}}
+   if(ph){out+=PR.tsp[ph];p+=ph.length;continue;}out+=PR.ts[s[p]]||s[p];p++;}}
+ let poly='';for(const c of text)if(PR.poly.includes(c)&&!poly.includes(c))poly+=c;
+ return{text:out,changes:ch,poly};}
+function modelOf(l){let s=(l.say&&l.say.trim())?l.say:l.text||'';(P.pronunciation||[]).forEach(e=>{if(e.from&&e.to!=null&&!e.zhuyin)s=s.split(e.from).join(e.to);});
+ return pronConvert(s.trim(),P.pronunciation,(P.engine||{}).taiwan!==false);}
+
 const SPK=[['vivian','Vivian 明亮年輕女聲'],['serena','Serena 溫柔年輕女聲'],['uncle_fu','Uncle Fu 成熟低沉男聲'],['aiden','Aiden 陽光年輕男聲'],['ryan','Ryan 有活力的男聲'],['dylan','Dylan（北京腔）'],['eric','Eric（四川腔）'],['ono_anna','Ono Anna 日文女聲'],['sohee','Sohee 韓文女聲']];
 const PRE={'男童':{pitchHz:270,pitchLock:0.6,formant:1.17,trebleDb:1},'女童':{pitchHz:300,pitchLock:0.6,formant:1.2,trebleDb:1},'可愛女聲':{pitchHz:0,pitchLock:0.6,formant:1.1,speed:1.03,trebleDb:2},'渾厚男聲':{pitchHz:0,pitchLock:0.6,formant:0.9,bassDb:4,trebleDb:-1},'一般女聲':{pitchHz:0,pitchLock:0.6,formant:1.0},'一般男聲':{pitchHz:0,pitchLock:0.6,formant:1.0},'惡魔':{pitchHz:0,pitchLock:0.6,formant:0.9,octDown:0.2,growl:0.12,bassDb:2,echoMs:100,echoFeedback:0.25,echoMix:0.2},'天使':{pitchHz:0,pitchLock:0.6,formant:1.08,octUp:0.18,trebleDb:3,reverb:0.35}};
 const FIELDS=[['pitchHz','音高Hz',0,500,5,0],['pitchLock','音高統一',0,1,0.05,0.5],['formant','共振峰',0.8,1.4,0.01,1],['speed','語速',0.7,1.3,0.01,1],['octDown','低八度疊音',0,1,0.05,0],['octUp','高八度疊音',0,1,0.05,0],['growl','沙啞',0,1,0.05,0],['bassDb','低音dB',-12,12,1,0],['trebleDb','高音dB',-12,12,1,0],['echoMs','回聲ms',0,800,10,0],['echoFeedback','回聲次數',0,0.85,0.05,0.3],['echoMix','回聲量',0,1,0.05,0],['reverb','殘響',0,1,0.05,0]];
@@ -106,6 +137,7 @@ function bindTop(){
  map.forEach(([s,k])=>{$(s).value=P[k]||'';$(s).oninput=e=>{P[k]=e.target.value;validate();};});
  P.engine=P.engine||{};P.output=P.output||{};
  $('#plang').value=P.engine.language||'chinese';$('#plang').onchange=e=>{P.engine.language=e.target.value;validate();};
+ $('#ptw').checked=P.engine.taiwan!==false;$('#ptw').onchange=e=>{P.engine.taiwan=e.target.checked;renderLines();};
  $('#ptemp').value=P.engine.temperature??0.8;$('#ptemp').oninput=e=>{P.engine.temperature=+e.target.value;validate();};
  $('#okbps').value=String(P.output.mp3Kbps||64);$('#okbps').onchange=e=>{P.output.mp3Kbps=+e.target.value;validate();};
  $('#olead').value=P.output.leadSec??0.5;$('#olead').oninput=e=>{P.output.leadSec=+e.target.value;validate();};
@@ -139,19 +171,24 @@ function renderLines(){
   <td class="n">${i+1}</td><td style="width:80px"><input value="${esc(l.id)}" data-i="${i}" data-k="id"></td>
   <td style="width:130px"><select data-i="${i}" data-k="role">${P.roles.map(r=>`<option value="${esc(r.id)}" ${r.id===l.role?'selected':''}>${esc(r.name)}</option>`).join('')}</select></td>
   <td><textarea data-i="${i}" data-k="text" rows="1">${esc(l.text)}</textarea></td>
-  <td><textarea data-i="${i}" data-k="say" rows="1" placeholder="（和台詞相同）">${esc(l.say)}</textarea></td>
+  <td><textarea data-i="${i}" data-k="say" rows="1" placeholder="（和台詞相同）">${esc(l.say)}</textarea><div class="mini" data-model="${i}"></div></td>
   <td><input list="insList" data-i="${i}" data-k="instruct" value="${esc(l.instruct)}"></td>
   <td><input data-i="${i}" data-k="note" value="${esc(l.note)}"></td>
   <td style="white-space:nowrap"><button class="b sm gray" onclick="mv(${i},-1)">↑</button><button class="b sm gray" onclick="mv(${i},1)">↓</button><button class="b sm gray" onclick="delLine(${i})">✕</button></td></tr>`).join('');
- $('#lines').querySelectorAll('[data-k]').forEach(el=>el.oninput=el.onchange=()=>{const l=P.lines[+el.dataset.i];const v=el.value;if(v===''&&['say','instruct','note'].includes(el.dataset.k))delete l[el.dataset.k];else l[el.dataset.k]=v;validate();});
+ $('#lines').querySelectorAll('[data-k]').forEach(el=>el.oninput=el.onchange=()=>{const l=P.lines[+el.dataset.i];const v=el.value;if(v===''&&['say','instruct','note'].includes(el.dataset.k))delete l[el.dataset.k];else l[el.dataset.k]=v;showModel(+el.dataset.i);validate();});
+ P.lines.forEach((l,i)=>showModel(i));
 }
 $('#fRole').onchange=renderLines;
+function showModel(i){const el=document.querySelector(`[data-model="${i}"]`);if(!el)return;const r=modelOf(P.lines[i]);
+ el.innerHTML='🔤 '+esc(r.text)+(r.changes.length?'<br>'+r.changes.map(c=>`<span style="background:#fff0c2;border-radius:6px;padding:0 4px">${esc(c.from)} ${esc(c.zhuyin)}</span>`).join(' '):'')+(r.poly?`<br>⚠ 多音字：${esc(r.poly)}`:'');}
 function addLine(){const f=$('#fRole').value||(P.roles[0]||{}).id;let n=P.lines.length+1,id=String(n).padStart(3,'0');while(P.lines.some(l=>l.id===id)){n++;id=String(n).padStart(3,'0');}P.lines.push({id,role:f,text:''});renderLines();validate();}
 function delLine(i){P.lines.splice(i,1);renderLines();validate();}
 function mv(i,d){const j=i+d;if(j<0||j>=P.lines.length)return;[P.lines[i],P.lines[j]]=[P.lines[j],P.lines[i]];renderLines();validate();}
-function renderPron(){P.pronunciation=P.pronunciation||[];$('#pron').innerHTML=P.pronunciation.map((e,i)=>`<tr><td><input value="${esc(e.from)}" data-i="${i}" data-k="from" placeholder="原本的詞"></td><td style="width:30px">→</td><td><input value="${esc(e.to)}" data-i="${i}" data-k="to" placeholder="同音字寫法"></td><td style="width:40px"><button class="b sm gray" onclick="P.pronunciation.splice(${i},1);renderPron();validate()">✕</button></td></tr>`).join('');
- $('#pron').querySelectorAll('[data-k]').forEach(el=>el.oninput=()=>{P.pronunciation[+el.dataset.i][el.dataset.k]=el.value;validate();});}
-function sayOf(l){let s=(l.say&&l.say.trim())?l.say:l.text||'';(P.pronunciation||[]).forEach(e=>{if(e.from)s=s.split(e.from).join(e.to||'');});return s.trim();}
+function renderPron(){P.pronunciation=P.pronunciation||[];$('#pron').innerHTML='<tr><th>字或詞</th><th>正確注音（建議）</th><th>或：換成這些字</th><th>送進模型</th><th></th></tr>'+P.pronunciation.map((e,i)=>`<tr><td><input value="${esc(e.from)}" data-i="${i}" data-k="from" placeholder="例如：縫"></td><td><input value="${esc(e.zhuyin||'')}" data-i="${i}" data-k="zhuyin" placeholder="例如：ㄈㄥˊ"></td><td><input value="${esc(e.to||'')}" data-i="${i}" data-k="to" placeholder="（不用填）"></td><td class="mini" data-pv="${i}"></td><td style="width:40px"><button class="b sm gray" onclick="P.pronunciation.splice(${i},1);renderPron();renderLines();validate()">✕</button></td></tr>`).join('');
+ const pv=i=>{const e=P.pronunciation[i],c=document.querySelector(`[data-pv="${i}"]`);if(!c)return;c.textContent=e.from?(e.zhuyin?(zy2py(e.zhuyin)?pronConvert(e.from+'{'+e.zhuyin+'}',[],false).text:'⚠ 看不懂這個注音'):(e.to?pronConvert(e.to,[],false).text:'')):'';};
+ P.pronunciation.forEach((e,i)=>pv(i));
+ $('#pron').querySelectorAll('[data-k]').forEach(el=>el.oninput=()=>{const e=P.pronunciation[+el.dataset.i];if(el.value==='')delete e[el.dataset.k];else e[el.dataset.k]=el.value;pv(+el.dataset.i);P.lines.forEach((l,i)=>showModel(i));validate();});}
+function sayOf(l){let s=(l.say&&l.say.trim())?l.say:l.text||'';(P.pronunciation||[]).forEach(e=>{if(e.from&&e.to!=null&&!e.zhuyin)s=s.split(e.from).join(e.to);});return s.trim();}
 function keyOf(l){if(l.key)return l.key;return ((P.output||{}).keyFormat||'{role}|{text}').replace('{role}',l.role).replace('{text}',l.text).replace('{id}',l.id);}
 // same rules as the App (Store.validate) and docs §5
 function validate(){
@@ -163,10 +200,12 @@ function validate(){
   const p=r.post||{};if(p.enabled){if(p.pitchHz&&(p.pitchHz<80||p.pitchHz>500))E.push(r.name+' 的音高超出範圍 80–500');if(p.formant<0.8||p.formant>1.4)E.push(r.name+' 的共振峰超出範圍 0.8–1.4');if(p.speed<0.7||p.speed>1.3)E.push(r.name+' 的語速超出範圍 0.7–1.3');}
   if(r.speaker==='dylan'||r.speaker==='eric')W.push(r.name+' 用的音色會帶北京／四川腔');
   if(/(低沉|尖細|尖聲|沙啞|渾厚|稚嫩|年級|歲|聲音[高低粗細])/.test(r.instruct||''))W.push(r.name+' 的說話方式描述了音色或年齡，可能讓每句聲音不一樣，建議改用後製');});
+ (P.pronunciation||[]).forEach(e=>{if(e.zhuyin&&PR&&!zy2py(e.zhuyin))E.push('發音修正「'+e.from+'」的注音看不懂：'+e.zhuyin);});
  const lid={},keys={};P.lines.forEach((l,i)=>{const n='第 '+(i+1)+' 句';
   if(!/^[A-Za-z0-9_-]{1,40}$/.test(l.id||''))E.push(n+' 的 id 格式不對');if(lid[l.id])E.push(n+' 的 id 重複：'+l.id);lid[l.id]=1;
   if(!rid[l.role])E.push(n+' 的角色不存在：'+l.role);if(!(l.text||'').trim())E.push(n+' 的台詞是空的');if((l.text||'').length>300)E.push(n+' 太長');
-  const s=sayOf(l);if(/[<\[][^>\]]{1,20}[>\]]/.test(s))E.push(n+' 的文字裡有 <…> 或 […] 標記');
+  const s=sayOf(l).replace(/\{[^{}]*\}/g,'');if(/[<\[][^>\]]{1,20}[>\]]/.test(s))E.push(n+' 的文字裡有 <…> 或 […] 標記');
+  ((sayOf(l).match(/\{([^{}]*)\}/g))||[]).forEach(m=>{if(PR&&!zy2py(m.slice(1,-1)))E.push(n+' 的注音看不懂：'+m);});
   if(/\d/.test(s))W.push(n+' 有阿拉伯數字，建議在唸法寫成中文：'+s.slice(0,20));
   if(s.length>80)W.push(n+' 超過 80 字，建議拆成兩句');
   const k=keyOf(l);if(keys[k]&&!(keys[k].role===l.role&&sayOf(keys[k])===s))E.push(n+' 的 key 和 '+keys[k].id+' 重複');keys[k]=l;});

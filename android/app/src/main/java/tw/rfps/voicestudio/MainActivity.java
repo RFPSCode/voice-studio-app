@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
 import android.view.WindowManager;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -50,6 +51,7 @@ public class MainActivity extends Activity {
             return;
         }
         web.addJavascriptInterface(bridge, "VS");
+        web.setWebChromeClient(new WebChromeClient());   // needed for alert() / confirm() in the page
         web.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {

@@ -69,6 +69,12 @@
         },
         "seed": {
           "type": "integer"
+        },
+        "taiwan": {
+          "type": "boolean"
+        },
+        "clean": {
+          "type": "boolean"
         }
       },
       "additionalProperties": true
@@ -82,13 +88,15 @@
       "items": {
         "type": "object",
         "required": [
-          "from",
-          "to"
+          "from"
         ],
         "properties": {
           "from": {
             "type": "string",
             "minLength": 1
+          },
+          "zhuyin": {
+            "type": "string"
           },
           "to": {
             "type": "string"
