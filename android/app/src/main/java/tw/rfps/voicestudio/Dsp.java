@@ -331,7 +331,7 @@ public final class Dsp {
     }
 
     // ------------------------------------------------------------ voice effects
-    static float[] fit(float[] a, int n) { return a.length == n ? a : Arrays.copyOf(a, n); }
+    public static float[] fit(float[] a, int n) { return a.length == n ? a : Arrays.copyOf(a, n); }
 
     /** Add a pitch-shifted copy of the voice (octave down = demon, octave up = shimmer). */
     public static float[] layer(float[] x, int sr, double pitch, double formant, double mix) {
