@@ -44,7 +44,7 @@ jobs:
               ap2 = np.array([np.interp(fr / a, fr, row) for row in ap])
               y = pw.synthesize(f0 * prm['ratio'], sp2, ap2, sr, 5)
               sf.write(f.replace('_0clean', '_6world'), (y / max(1e-6, np.abs(y).max()) * 0.8).astype(np.float32), sr, subtype='PCM_16')
-          keys = ['0clean', '1old', '2new', '3pitch', '4form', '5ident', '6world']
+          keys = ['0clean', '1old', '2new', '3pitch', '4form', '5ident', '6world', '7formRS']
           tot = {k: {'utmos': [], 'dns': [], 'cer': []} for k in keys}
           def han(t): return re.sub(r'[^一-鿿]', '', t)
           for b in sorted(set(f.rsplit('_', 1)[0] for f in glob.glob('ab/*_0clean.wav'))):

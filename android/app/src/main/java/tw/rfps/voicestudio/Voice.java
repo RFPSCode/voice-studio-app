@@ -248,6 +248,14 @@ public final class Voice {
      * @param growl  0..1 period doubling + jitter
      */
     public static float[] psola(float[] x, int sr, double pitch, double time, double growl) {
+        return psola(x, sr, pitch, time, growl, 1);
+    }
+
+    /**
+     * @param formant  formant (vocal-tract) factor: every grain is read `formant` times faster (band-limited),
+     *                 which moves the spectral envelope while the grain spacing alone sets the pitch.
+     */
+    public static float[] psola(float[] x, int sr, double pitch, double time, double growl, double formant) {
         if (x.length < sr / 20) return x.clone();
         Track tr = track(x, sr);
         Marks m = marks(x, sr, tr);
@@ -281,10 +289,12 @@ public final class Voice {
                 // a grain may reach to the neighbouring pulses, never past them
                 capL[ns] = linked(m, k - 1) ? c - m.pos[k - 1] : (int) Math.round(Pa);
                 capR[ns] = linked(m, k) ? m.pos[k + 1] - c : (int) Math.round(Pa);
+                double fwdIn = capR[ns];
+                if (formant != 1) { capL[ns] = (int) Math.floor(capL[ns] / formant); capR[ns] = (int) Math.floor(capR[ns] / formant); }
                 sSrc[ns] = c;
                 sGain[ns] = (growl > 0 && (ns & 1) == 1) ? 1 - 0.55 * growl : 1;
                 // the real distance to the next pulse (keeps the natural rhythm, also of creaky / irregular pulses)
-                double fwd = capR[ns];
+                double fwd = fwdIn;
                 double Ps = fwd / pitch;
                 if (growl > 0) {
                     rnd ^= rnd << 13; rnd ^= rnd >>> 7; rnd ^= rnd << 17;
@@ -295,7 +305,7 @@ public final class Voice {
                 ts += Math.max(2, Ps);
             } else {
                 sSrc[ns] = (int) Math.round(ta);
-                capL[ns] = capR[ns] = 3 * U;        // noise grains may stretch to fill a junction
+                capL[ns] = capR[ns] = (int) (3 * U / formant);   // noise grains may stretch to fill a junction
                 sGain[ns] = 1;
                 ns++;
                 double next = ts + U;
@@ -326,7 +336,8 @@ public final class Voice {
         }
         double[] out = new double[L + sr / 10];
         for (int i = 0; i < ns; i++)
-            grain(x, sSrc[i], lf[i], lj[i], rf[i], rj[i], out, (int) Math.round(sPos[i]), sGain[i]);
+            if (formant == 1) grain(x, sSrc[i], lf[i], lj[i], rf[i], rj[i], out, (int) Math.round(sPos[i]), sGain[i]);
+            else grainScaled(x, sSrc[i], formant, lf[i], lj[i], rf[i], rj[i], out, (int) Math.round(sPos[i]), sGain[i]);
         float[] y = new float[L];
         for (int i = 0; i < L; i++) y[i] = (float) out[i];
         return y;
@@ -349,6 +360,33 @@ public final class Voice {
             out[oi] += x[si] * w * gain;
         }
     }
+
+    /** Like grain(), but the source is read `rate` times faster around c (Kaiser-windowed sinc, band-limited). */
+    static void grainScaled(float[] x, int c, double rate, int lf, int lj, int rf, int rj, double[] out, int at, double gain) {
+        double[] kw = kaiser();
+        double fc = Math.min(1.0, 1.0 / rate) * 0.97, half = GR_ZC / fc;
+        for (int d = -(lf + lj) + 1; d < rf + rj; d++) {
+            int oi = at + d;
+            if (oi < 0 || oi >= out.length) continue;
+            double w;
+            if (d >= -lf && d <= rf) w = 1;
+            else if (d > rf) w = 0.5 + 0.5 * Math.cos(Math.PI * (d - rf) / rj);
+            else w = 0.5 + 0.5 * Math.cos(Math.PI * (-lf - d) / lj);
+            double t = c + d * rate, s = 0;
+            int a = (int) Math.ceil(t - half), b = (int) Math.floor(t + half);
+            for (int k = Math.max(0, a); k <= Math.min(x.length - 1, b); k++) {
+                double u = (t - k) * fc;
+                double sinc = Math.abs(u) < 1e-9 ? 1 : Math.sin(Math.PI * u) / (Math.PI * u);
+                double p = Math.abs(u) / GR_ZC * (RS_ZC * RS_RES);
+                int pi = (int) p;
+                double kv = pi + 1 < kw.length ? kw[pi] + (kw[pi + 1] - kw[pi]) * (p - pi) : 0;
+                s += x[k] * fc * sinc * kv;
+            }
+            out[oi] += s * w * gain;
+        }
+    }
+
+    private static final int GR_ZC = 12;
 
     // ================================================================ resampling (Kaiser-windowed sinc)
     private static final int RS_ZC = 24, RS_RES = 256;
@@ -409,9 +447,8 @@ public final class Voice {
         if (pitchRatio <= 0) pitchRatio = 1;
         if (formant <= 0) formant = 1;
         if (speed <= 0) speed = 1;
-        float[] y = Math.abs(formant - 1) > 1e-3 ? resample(x, formant) : x;
-        // after resampling: pitch is x formant, length is / formant
-        return psola(y, sr, pitchRatio / formant, formant / speed, growl);
+        if (Math.abs(formant - 1) < 1e-3) formant = 1;
+        return psola(x, sr, pitchRatio, 1 / speed, growl, formant);
     }
 
     // ================================================================ echo
