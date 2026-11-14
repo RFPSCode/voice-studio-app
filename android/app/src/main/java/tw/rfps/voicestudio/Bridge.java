@@ -275,6 +275,42 @@ public class Bridge {
     }
 
     @JavascriptInterface
+    public void setRoleSpeaker(String pid, String role, String speaker) {
+        try { store.setRoleSpeaker(pid, role, speaker); } catch (Exception e) { emit("error", "msg", e.getMessage()); }
+        emit("refresh");
+    }
+
+    /** Hear a speaker + post settings on the role's first line (needs the model, ~10 s). */
+    @JavascriptInterface
+    public void audition(String pid, String role, String speaker, String postJson) {
+        start("試聽音色", () -> {
+            loadEngine();
+            File f = store.audition(pid, role, speaker, postJson == null || postJson.isEmpty() ? null : new JSONObject(postJson), engine);
+            emit("preview", "url", act.fileUrl(f));
+        });
+    }
+
+    /** One tap: record every line that is missing or changed, apply post-processing, export. */
+    @JavascriptInterface
+    public void makeAll(String pid, boolean share) {
+        start("一鍵完成", () -> {
+            loadEngine();
+            long t0 = System.currentTimeMillis();
+            int n = store.generate(pid, null, 1, activeModel(), engine, progress());
+            if (cancel.get()) { emit("log", "msg", "■ 已停止。錄好的句子都保留著。"); emit("refresh"); return; }
+            int m = store.repostStale(pid, progress());
+            JSONObject info = store.export(pid, Native::mp3);
+            File ex = new File(store.dir(pid), "export");
+            Uri a = saveToDownloads(pid, new File(ex, "all.txt"));
+            Uri b = saveToDownloads(pid, new File(ex, "map.txt"));
+            info.put("folder", "Download/語音工作室/" + pid).put("made", n).put("posted", m).put("minutes", Math.round((System.currentTimeMillis() - t0) / 6000.0) / 10.0);
+            emit(new JSONObject().put("type", "exported").put("info", info));
+            emit("refresh");
+            if (share) act.share(new Uri[]{a, b});
+        });
+    }
+
+    @JavascriptInterface
     public void previewPost(String pid, String lid, String postJson) {
         start("試聽後製", () -> {
             File f = store.previewPost(pid, lid, new JSONObject(postJson));

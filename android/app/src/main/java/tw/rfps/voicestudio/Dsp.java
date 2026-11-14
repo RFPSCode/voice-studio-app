@@ -441,4 +441,98 @@ public final class Dsp {
         for (int i = 0; i < y.length; i++) y[i] *= g;
         return y;
     }
+
+    // ------------------------------------------------------------ clean speech
+    /** Per-frame (10 ms) voicing via a cheap normalised autocorrelation peak in the 75–500 Hz range. */
+    static boolean[] voicedFrames(float[] x, int sr, double[] rmsOut) {
+        int hop = sr / 100, w = (int) (sr * 0.03), tMin = sr / 500, tMax = sr / 75;
+        int n = rmsOut.length;
+        boolean[] v = new boolean[n];
+        for (int f = 0; f < n; f++) {
+            int o = f * hop;
+            double e = 0;
+            for (int j = 0; j < hop && o + j < x.length; j++) e += x[o + j] * x[o + j];
+            rmsOut[f] = Math.sqrt(e / hop);
+            if (o + w + tMax >= x.length) continue;
+            double e0 = 0;
+            for (int j = 0; j < w; j++) e0 += x[o + j] * x[o + j];
+            if (e0 < 1e-7) continue;
+            double best = 0;
+            for (int t = tMin; t <= tMax; t += 2) {
+                double c = 0, e1 = 0;
+                for (int j = 0; j < w; j += 2) { c += x[o + j] * x[o + j + t]; e1 += x[o + j + t] * x[o + j + t]; }
+                double r = c / Math.sqrt(e0 / 2 * e1 + 1e-12);
+                if (r > best) best = r;
+            }
+            v[f] = best > 0.6;
+        }
+        return v;
+    }
+
+    /**
+     * Remove breaths, clicks and long silences that the model adds around and between phrases:
+     * keeps only real speech (voiced, or loud consonants next to it), shortens pauses to at most
+     * maxPause seconds, and trims the start/end. Words written in the text (哈哈、嗚嗚) are voiced and stay.
+     */
+    public static float[] cleanSpeech(float[] x, int sr, double maxPause) {
+        int hop = sr / 100, n = x.length / hop;
+        if (n < 10) return x;
+        double[] rms = new double[n];
+        boolean[] voiced = voicedFrames(x, sr, rms);
+        double[] srt = rms.clone();
+        Arrays.sort(srt);
+        double p95 = srt[(int) (n * 0.95)];
+        if (p95 <= 1e-6) return x;
+        boolean[] sp = new boolean[n];
+        for (int f = 0; f < n; f++) sp[f] = (voiced[f] && rms[f] > 0.06 * p95) || rms[f] > 0.3 * p95;
+        // remove isolated blips (< 40 ms) that are not voiced
+        for (int f = 0; f < n; ) {
+            if (!sp[f]) { f++; continue; }
+            int g = f;
+            boolean anyV = false;
+            while (g < n && sp[g]) { anyV |= voiced[g]; g++; }
+            if (g - f < 4 && !anyV) for (int k = f; k < g; k++) sp[k] = false;
+            f = g;
+        }
+        // grow each speech run: 100 ms back (consonant onsets) and 80 ms forward (decays), while there is some energy
+        boolean[] keep = sp.clone();
+        for (int f = 0; f < n; f++) {
+            if (!sp[f]) continue;
+            if (f == 0 || !sp[f - 1]) for (int k = f - 1; k >= Math.max(0, f - 10) && rms[k] > 0.04 * p95; k--) keep[k] = true;
+            if (f == n - 1 || !sp[f + 1]) for (int k = f + 1; k <= Math.min(n - 1, f + 8) && rms[k] > 0.02 * p95; k++) keep[k] = true;
+        }
+        int first = -1, last = -1;
+        for (int f = 0; f < n; f++) if (keep[f]) { if (first < 0) first = f; last = f; }
+        if (first < 0) return x;
+        int maxGap = (int) Math.round(maxPause * 100);
+        float[] out = new float[x.length + sr];
+        int o = 0;
+        int lead = Math.min(first, 5);                     // 50 ms of quiet lead-in
+        for (int i = (first - lead) * hop; i < first * hop; i++) out[o++] = 0f;
+        for (int f = first; f <= last; ) {
+            if (keep[f]) {
+                int g = f;
+                while (g <= last && keep[g]) g++;
+                int a = f * hop, b = Math.min(x.length, g * hop);
+                double fin = 0.008 * sr;                       // 8 ms fade-in at the start of every speech run
+                for (int i = a; i < b; i++) out[o++] = (float) (x[i] * Math.min(1, (i - a + 1) / fin));
+                f = g;
+            } else {
+                int g = f;
+                while (g <= last && !keep[g]) g++;
+                int len = Math.min(g - f, maxGap) * hop;      // silence instead of the breath / long pause
+                for (int i = 0; i < len; i++) out[o++] = 0f;
+                f = g;
+            }
+        }
+        int tail = Math.min(sr / 10, out.length - o);
+        for (int i = 0; i < tail; i++) out[o++] = 0f;
+        float[] y = Arrays.copyOf(out, o);
+        // short fade-out at every speech->silence boundary
+        for (int i = 1; i < y.length; i++) if (y[i] == 0f && y[i - 1] != 0f) {
+            int k = i - 1, m = (int) (0.006 * sr);
+            for (int j = 0; j < m && k - j >= 0; j++) y[k - j] *= (float) j / m;
+        }
+        return y;
+    }
 }

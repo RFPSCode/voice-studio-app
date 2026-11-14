@@ -103,6 +103,8 @@ pre{white-space:pre-wrap;font-size:11.5px;background:#1b1d3a;color:#d6d4ff;borde
   <h2 id="recTitle"></h2>
   <div class="row" style="justify-content:space-between"><span id="recStat"></span><span class="hint" id="recSpeed"></span></div>
   <div class="bar" style="margin:8px 0"><i id="recBar"></i></div>
+  <button class="b wide" style="font-size:17px;padding:12px" onclick="VS.makeAll(P,false)">⚡ 一鍵完成：產生＋後製＋匯出</button>
+  <div class="hint" id="oneHint" style="margin:6px 0 10px">會錄好所有未錄或已修改的句子、套用每個角色的後製，再匯出到下載資料夾。</div>
   <div class="row">
    <button class="b" id="btnGen" onclick="genAll()">▶ 產生未完成的句子</button>
    <button class="b red" onclick="VS.cancel()">■ 停止</button>
@@ -123,7 +125,7 @@ pre{white-space:pre-wrap;font-size:11.5px;background:#1b1d3a;color:#d6d4ff;borde
 <!-- ================= 角色 ================= -->
 <section id="t-role" class="hide">
  <div class="card hint">
-  <b>後製</b>：每個角色固定一個音色，再用後製做出角色感：<b>男童、女童、可愛女聲、渾厚男聲、一般女聲、一般男聲、惡魔、天使</b>，或打開「細項調整」自己調。
+  <b>音色＋後製</b>：先替每個角色選一個 Qwen 內建音色（按「試聽音色＋後製」聽聽看），再用後製做出角色感，設定好按「儲存」。<br>每個角色固定一個音色，再用後製做出角色感：<b>男童、女童、可愛女聲、渾厚男聲、一般女聲、一般男聲、惡魔、天使</b>，或打開「細項調整」自己調。
   「音高統一」會把每一句拉到同樣的音高，讓同一個角色聽起來一致。在這裡調整會覆蓋專案檔的設定，不用重錄、不用網路。
  </div>
  <div id="roles"></div>
@@ -201,7 +203,7 @@ function renderRec(){
  $('#recTitle').textContent=S.project.title;$$('.pid').forEach(e=>e.textContent=P);
  $('#recStat').innerHTML=`完成 <b>${S.done}</b> / ${S.total}${S.changed?`　<span class="badge s-changed">已修改 ${S.changed}</span>`:''}`;
  $('#recBar').style.width=(S.total?S.done/S.total*100:0)+'%';
- const todo=S.lines.filter(l=>l.status!=='done').length;$('#btnGen').textContent=todo?`▶ 產生未完成的 ${todo} 句`:'✓ 全部完成';$('#btnGen').disabled=!todo;
+ const todo=S.lines.filter(l=>l.status!=='done').length;$('#oneHint').textContent=(todo||S.stalePost)?`還有 ${todo} 句要錄、${S.stalePost||0} 句要重新後製。完成後自動匯出到下載資料夾。`:'全部完成。再按一次會直接重新匯出。';$('#btnGen').textContent=todo?`▶ 產生未完成的 ${todo} 句`:'✓ 全部完成';$('#btnGen').disabled=!todo;
  $$('#filters button').forEach(b=>b.classList.toggle('on',b.dataset.f===FILT));
  const L=S.lines.filter(l=>!FILT||(FILT==='odd'?isOdd(l):l.status===FILT));
  $('#lines').innerHTML=L.length?L.map(lineCard).join(''):'<div class="empty">沒有符合的句子</div>';
@@ -226,14 +228,16 @@ function renderRoles(){
  $('#roles').innerHTML=S.project.roles.map(r=>{const p=fullPost(S.posts[r.id]);const pre=p.enabled?(p.preset||'自訂'):'不處理';
   const done=S.lines.filter(l=>l.role===r.id&&l.chosen>=0);
   return `<div class="card" data-r="${r.id}"><h3>${esc(r.name)} <span class="hint">${esc(r.id)}</span></h3>
-   <div class="hint">🔊 固定音色：${esc(SPK[r.speaker]||r.speaker)}${r.instruct?`<br>🎭 ${esc(r.instruct)}`:''}</div>
+   <div class="row" style="flex-wrap:nowrap;margin-top:4px"><b style="white-space:nowrap">🔊 音色</b><select class="spk" style="flex:1">${Object.keys(SPK).map(k=>`<option value="${k}" ${k===(S.speakers[r.id]||r.speaker)?'selected':''}>${SPK[k]}</option>`).join('')}</select></div>
+   ${(S.speakers[r.id]||r.speaker)!==r.speaker?`<div class="hint">（專案檔原本是 ${esc(SPK[r.speaker]||r.speaker)}）</div>`:''}${r.instruct?`<div class="hint">🎭 ${esc(r.instruct)}</div>`:''}
+   <div class="row" style="margin-top:6px"><button class="b sm blue a-aud">▶ 試聽音色＋後製</button><span class="hint">用這個角色的第一句，約 10–20 秒</span></div>
    <div class="fx ${p.enabled?'on':''}"><div class="row" style="font-weight:700;flex-wrap:nowrap">🎚 後製<select class="pre" style="flex:1">${['不處理',...Object.keys(PRE),'自訂'].map(k=>`<option ${k===pre?'selected':''}>${k}</option>`).join('')}</select></div>
     <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">細項調整</summary>
     ${FIELDS.map(f=>`<div class="sl">${f[1]}<input type="range" data-k="${f[0]}" min="${f[2]}" max="${f[3]}" step="${f[4]}" value="${p[f[0]]}"><b data-v="${f[0]}"></b></div>`).join('')}
     <div class="hint">音高：這個角色的平均音高（0＝不改）。音高統一：越大，每句的音高越接近設定值，聲音越一致。疊音、沙啞、回聲、殘響適合惡魔、天使、機器人等角色。</div></details>
     ${done.length?`<select class="smp" style="margin-top:8px">${done.map(l=>`<option value="${l.id}">#${l.id}　${esc(l.text.slice(0,18))}</option>`).join('')}</select>
     <div class="row" style="margin-top:8px"><button class="b sm gray a-raw">▶ 原始</button><button class="b sm a-prev">▶ 後製試聽</button><button class="b sm green a-apply">套用到全部台詞</button></div>`:'<div class="hint" style="margin-top:6px">這個角色還沒有錄好的句子，錄好後才能試聽。</div>'}
-    <div class="row" style="margin-top:6px"><button class="b sm gray a-reset">恢復專案檔的設定</button></div></div></div>`;}).join('');
+    <div class="row" style="margin-top:6px"><button class="b sm green a-save">💾 儲存這個角色的設定</button><button class="b sm gray a-reset">恢復專案檔的設定</button></div></div></div>`;}).join('');
  $$('#roles .card').forEach(card=>{const rid=card.dataset.r;let cur=fullPost(S.posts[rid]);
   const show=()=>{FIELDS.forEach(f=>{card.querySelector(`[data-k=${f[0]}]`).value=cur[f[0]];card.querySelector(`[data-v=${f[0]}]`).textContent=fmtF(f,cur[f[0]]);});card.querySelector('.fx').classList.toggle('on',cur.enabled);};
   show();
@@ -242,8 +246,12 @@ function renderRoles(){
   const smp=()=>card.querySelector('.smp')?card.querySelector('.smp').value:'';
   const ra=card.querySelector('.a-raw');if(ra)ra.onclick=()=>{const l=S.lines.find(x=>x.id===smp());if(l)play(fileUrl(`projects/${P}/takes/${l.id}_${l.chosen}.wav`));};
   const pv=card.querySelector('.a-prev');if(pv)pv.onclick=()=>{if(!cur.enabled){const l=S.lines.find(x=>x.id===smp());if(l)play(fileUrl(`projects/${P}/takes/${l.id}_${l.chosen}.wav`));return;}VS.previewPost(P,smp(),JSON.stringify(cur));};
-  const ap=card.querySelector('.a-apply');if(ap)ap.onclick=()=>VS.setRolePost(P,rid,JSON.stringify(cur));
-  card.querySelector('.a-reset').onclick=()=>{if(confirm('恢復成專案檔裡的設定？'))VS.setRolePost(P,rid,'');};
+  const spk=()=>card.querySelector('.spk').value;
+  card.querySelector('.a-aud').onclick=()=>VS.audition(P,rid,spk(),cur.enabled?JSON.stringify(cur):'');
+  const save=()=>{const changed=spk()!==(S.speakers[rid]);if(changed){if(!confirm('換音色後，這個角色的句子需要重新產生（按「一鍵完成」會自動處理）。確定嗎？'))return;VS.setRoleSpeaker(P,rid,spk());}VS.setRolePost(P,rid,JSON.stringify(cur));};
+  const ap=card.querySelector('.a-apply');if(ap)ap.onclick=save;
+  card.querySelector('.a-save').onclick=save;
+  card.querySelector('.a-reset').onclick=()=>{if(confirm('音色和後製都恢復成專案檔裡的設定？')){VS.setRoleSpeaker(P,rid,'');VS.setRolePost(P,rid,'');}};
  });
 }
 function renderModels(){
@@ -269,11 +277,12 @@ window.onVS=ev=>{
   case 'imported':toast(ev.msg);P=ev.project;localStorage.setItem('vs_p',P);break;
   case 'download':{const pct=ev.total>0?ev.got/ev.total*100:0;$('#dBar').style.width=pct+'%';toast(`下載 ${ev.file}：${(ev.got/1048576).toFixed(0)}${ev.total>0?' / '+(ev.total/1048576).toFixed(0):''} MB`);break;}
   case 'preview':play(ev.url);break;
-  case 'exported':{const i=ev.info;toast(`✓ 已匯出 ${i.lines} 句（${i.seconds} 秒，${i.mb} MB）到 ${i.folder}${i.missing?`；還有 ${i.missing} 句沒錄`:''}`);alert(`已匯出到手機的「${i.folder}」\nall.txt、map.txt（${i.lines} 句）`);break;}
+  case 'exported':{const i=ev.info;toast(`✓ 已匯出 ${i.lines} 句（${i.seconds} 秒，${i.mb} MB）到 ${i.folder}${i.missing?`；還有 ${i.missing} 句沒錄`:''}${i.minutes!=null?`，用了 ${i.minutes} 分鐘`:''}`);alert(`已匯出到手機的「${i.folder}」\nall.txt、map.txt（${i.lines} 句）`);break;}
   case 'line':{if(ev.project!==P)break;const li=S&&S.lines.find(x=>x.id===ev.line);
    if(ev.status==='running'){RUN[ev.line]='running';toast(`產生 #${ev.line}${ev.info.of>1?`（版本 ${ev.info.take}/${ev.info.of}）`:''}：${li?li.text.slice(0,24):''}`);}
    else{delete RUN[ev.line];if(ev.status==='take'){rate.push(ev.info.rtf);if(rate.length>8)rate.shift();const r=rate.reduce((a,b)=>a+b,0)/rate.length;$('#recSpeed').textContent=`速度：每秒語音約 ${r.toFixed(1)} 秒`;}
     if(ev.status==='error')toast(`#${ev.line} 失敗：${ev.info.msg}`);
+    if(ev.status==='retry'){toast(`#${ev.line} 長度不太對（${(+ev.info.dur).toFixed(1)} 秒），自動重錄…`);RUN[ev.line]='running';}
     S=J(VS.summary(P));const done=S.done,total=S.total;$('#dBar').style.width=(total?done/total*100:0)+'%';}
    if(cur==='rec'){const el=document.getElementById('L_'+ev.line);const nl=S.lines.find(x=>x.id===ev.line);if(el&&nl){el.outerHTML=lineCard(nl);}
     $('#recStat').innerHTML=`完成 <b>${S.done}</b> / ${S.total}`;$('#recBar').style.width=(S.total?S.done/S.total*100:0)+'%';}

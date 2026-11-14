@@ -218,10 +218,21 @@ public class Store {
         return fmt.replace("{role}", l.optString("role")).replace("{text}", l.optString("text")).replace("{id}", l.optString("id"));
     }
 
-    public static String sigOf(JSONObject p, JSONObject l, String model) {
+    /** Speaker chosen on the phone (state.roles[role].speaker) or the project's speaker. */
+    public static String speakerOf(JSONObject p, JSONObject st, String role) {
+        JSONObject rs = st != null && st.optJSONObject("roles") != null ? st.optJSONObject("roles").optJSONObject(role) : null;
+        String sp = rs != null ? rs.optString("speaker", "") : "";
+        return sp.isEmpty() ? roleOf(p, role).optString("speaker") : sp;
+    }
+
+    /** Extra instruction against breathing noises and long pauses (engine.clean, default on). */
+    public static final String CLEAN_INSTRUCT = "說話乾淨俐落，不要喘氣或發出多餘的聲音，句子中間不要停頓太久";
+
+    public static String sigOf(JSONObject p, JSONObject st, JSONObject l, String model) {
         JSONObject e = p.optJSONObject("engine");
         String lang = e != null ? e.optString("language", "chinese") : "chinese";
-        return md5(sayOf(p, l) + "\u0001" + roleOf(p, l.optString("role")).optString("speaker") + "\u0001" + instructOf(p, l) + "\u0001" + lang + "\u0001" + model);
+        boolean clean = e == null || e.optBoolean("clean", true);
+        return md5(sayOf(p, l) + "\u0001" + speakerOf(p, st, l.optString("role")) + "\u0001" + instructOf(p, l) + "\u0001" + lang + "\u0001" + model + (clean ? "\u0001c2" : ""));
     }
 
     // ------------------------------------------------------------------ projects
@@ -302,7 +313,7 @@ public class Store {
             r.put("note", l.optString("note"));
             String status = "todo";
             if (s != null && s.optInt("chosen", -1) >= 0 && outFile(id, l.getString("id")).exists()) {
-                status = s.optString("sig").equals(sigOf(p, l, model)) ? "done" : "changed";
+                status = s.optString("sig").equals(sigOf(p, st, l, model)) ? "done" : "changed";
                 r.put("takes", s.optJSONArray("takes") != null ? s.optJSONArray("takes") : new JSONArray());
                 r.put("chosen", s.optInt("chosen"));
                 r.put("dur", s.optDouble("dur", 0));
@@ -321,13 +332,16 @@ public class Store {
         res.put("done", done);
         res.put("changed", changed);
         res.put("total", lines.length());
-        JSONObject posts = new JSONObject();
+        JSONObject posts = new JSONObject(), speakers = new JSONObject();
         JSONArray roles = p.getJSONArray("roles");
         for (int i = 0; i < roles.length(); i++) {
             String rid = roles.getJSONObject(i).getString("id");
             posts.put(rid, postOf(p, st, rid));
+            speakers.put(rid, speakerOf(p, st, rid));
         }
         res.put("posts", posts);
+        res.put("speakers", speakers);
+        res.put("stalePost", countStalePost(p, st, id));
         return res;
     }
 
@@ -357,33 +371,42 @@ public class Store {
             JSONObject l = lines.getJSONObject(i);
             String lid = l.getString("id");
             JSONObject st = state(id), ls = st.getJSONObject("lines"), s = ls.optJSONObject(lid);
-            String sig = sigOf(p, l, model);
+            String sig = sigOf(p, st, l, model);
             if (only == null) {
                 if (s != null && sig.equals(s.optString("sig")) && s.optInt("chosen", -1) >= 0 && outFile(id, lid).exists()) continue;
             } else if (!only.contains(lid)) continue;
-            String role = l.optString("role"), speaker = roleOf(p, role).optString("speaker");
+            String role = l.optString("role"), speaker = speakerOf(p, st, role);
             String text = sayOf(p, l), ins = instructOf(p, l);
+            if (eng.optBoolean("clean", true)) ins = ins.isEmpty() ? CLEAN_INSTRUCT : ins + "；" + CLEAN_INSTRUCT;
             boolean fresh = s == null || !sig.equals(s.optString("sig"));
             JSONArray tk = fresh || s.optJSONArray("takes") == null ? new JSONArray() : s.getJSONArray("takes");
             for (int t = 0; t < takes && !pr.cancelled(); t++) {
                 long seed = (seed0 >= 0 ? seed0 : roleSeed(roleOf(p, role))) + 7919L * tk.length();
                 pr.line(id, lid, "running", new JSONObject().put("take", tk.length() + 1).put("of", takes));
                 long t0 = System.currentTimeMillis();
-                float[] a;
-                try {
-                    a = engine.synth(text, lang, speaker, ins, seed, temp, topP);
-                } catch (Exception e) {
+                float[] a = null;
+                double dur = 0;
+                boolean odd = true;
+                String err = null;
+                // up to 3 attempts: a take whose length does not fit the text (extra noises, mumbling) is redone
+                for (int attempt = 0; attempt < 3 && odd && !pr.cancelled(); attempt++) {
+                    float[] r;
+                    try {
+                        r = engine.synth(text, lang, speaker, ins, seed < 0 ? -1 : seed + 104729L * attempt, temp, topP);
+                    } catch (Exception e) { err = String.valueOf(e.getMessage()); break; }
+                    if (r == null) { err = "沒有產生聲音"; break; }
+                    r = Dsp.tidy(Dsp.cleanSpeech(r, SR, maxPause(text)), SR);
+                    double d = r.length / (double) SR;
+                    boolean o = oddLength(text, d);
+                    if (a == null || !o) { a = r; dur = d; odd = o; }
+                    if (o) pr.line(id, lid, "retry", new JSONObject().put("dur", d));
+                }
+                if (a == null) {
                     if (pr.cancelled()) break;
-                    pr.line(id, lid, "error", new JSONObject().put("msg", String.valueOf(e.getMessage())));
+                    pr.line(id, lid, "error", new JSONObject().put("msg", err == null ? "沒有產生聲音" : err));
                     break;
                 }
-                if (a == null) { if (pr.cancelled()) break; pr.line(id, lid, "error", new JSONObject().put("msg", "沒有產生聲音")); break; }
-                a = Dsp.tidy(a, SR);
-                double dur = a.length / (double) SR;
                 double secs = (System.currentTimeMillis() - t0) / 1000.0;
-                // sanity: about 0.1–0.9 s per character; otherwise retry once
-                int chars = Math.max(1, text.replaceAll("[\\s，。！？、；：「」『』（）…—,.!?;:()\"']", "").length());
-                boolean odd = dur < 0.3 || dur / chars > 0.9 || dur / chars < 0.08;
                 int k = tk.length();
                 writeWav(takeFile(id, lid, k), a);
                 tk.put(new JSONObject().put("k", k).put("dur", Math.round(dur * 100) / 100.0).put("odd", odd));
@@ -401,6 +424,19 @@ public class Store {
             }
         }
         return made;
+    }
+
+    static int speechChars(String text) {
+        return Math.max(1, text.replaceAll("[\\s，。！？、；：「」『』（）…—,.!?;:()\"'~～]", "").length());
+    }
+
+    /** Longest pause kept inside a line: longer for lines with 「……」. */
+    static double maxPause(String text) { return text.contains("…") ? 0.5 : 0.3; }
+
+    /** Normal Mandarin is about 0.18–0.3 s per character; far outside that means extra sounds or skipped words. */
+    static boolean oddLength(String text, double dur) {
+        int c = speechChars(text);
+        return dur < 0.3 || dur > c * 0.36 + 1.0 || dur < c * 0.11;
     }
 
     public void choose(String id, String lid, int k) throws Exception {
@@ -511,6 +547,7 @@ public class Store {
         float[] o = applyPost(a, post, post.optBoolean("enabled") ? roleBaseF0(id, role) : 0);
         writeWav(outFile(id, lid), o);
         s.put("dur", Math.round(o.length * 100.0 / SR) / 100.0);
+        s.put("postSig", md5(post.toString()) + ":" + s.getInt("chosen"));
         saveState(id, st);
     }
 
@@ -542,6 +579,73 @@ public class Store {
             if (pr != null) pr.line(id, l.getString("id"), "post", new JSONObject());
         }
         return n;
+    }
+
+    int countStalePost(JSONObject p, JSONObject st, String id) throws Exception {
+        JSONArray lines = p.getJSONArray("lines");
+        int n = 0;
+        for (int i = 0; i < lines.length(); i++) {
+            JSONObject l = lines.getJSONObject(i), s = st.getJSONObject("lines").optJSONObject(l.getString("id"));
+            if (s == null || s.optInt("chosen", -1) < 0) continue;
+            if (!(md5(postOf(p, st, l.optString("role")).toString()) + ":" + s.getInt("chosen")).equals(s.optString("postSig"))) n++;
+        }
+        return n;
+    }
+
+    /** Re-process lines whose post settings changed since they were processed. */
+    public int repostStale(String id, Progress pr) throws Exception {
+        JSONObject p = project(id), st = state(id);
+        JSONArray lines = p.getJSONArray("lines");
+        int n = 0;
+        for (int i = 0; i < lines.length(); i++) {
+            if (pr != null && pr.cancelled()) break;
+            JSONObject l = lines.getJSONObject(i);
+            JSONObject s = st.getJSONObject("lines").optJSONObject(l.getString("id"));
+            if (s == null || s.optInt("chosen", -1) < 0) continue;
+            String want = md5(postOf(p, st, l.optString("role")).toString()) + ":" + s.getInt("chosen");
+            if (want.equals(s.optString("postSig")) && outFile(id, l.getString("id")).exists()) continue;
+            postLine(id, l.getString("id"));
+            n++;
+            if (pr != null) pr.line(id, l.getString("id"), "post", new JSONObject());
+        }
+        return n;
+    }
+
+    /** Speaker chosen on the phone; empty = back to the project file's speaker. */
+    public void setRoleSpeaker(String id, String role, String speaker) throws Exception {
+        JSONObject st = state(id);
+        JSONObject roles = st.optJSONObject("roles");
+        if (roles == null) { roles = new JSONObject(); st.put("roles", roles); }
+        JSONObject r = roles.optJSONObject(role);
+        if (r == null) { r = new JSONObject(); roles.put(role, r); }
+        if (speaker == null || speaker.isEmpty()) r.remove("speaker"); else r.put("speaker", speaker);
+        saveState(id, st);
+        invalidateBase(id, role);
+    }
+
+    /** Try a speaker + post settings on a role's first line (raw result cached per speaker). */
+    public File audition(String id, String role, String speaker, JSONObject post, Synth engine) throws Exception {
+        JSONObject p = project(id), eng = p.optJSONObject("engine") != null ? p.optJSONObject("engine") : new JSONObject();
+        JSONObject line = null;
+        JSONArray lines = p.getJSONArray("lines");
+        for (int i = 0; i < lines.length() && line == null; i++) if (lines.getJSONObject(i).optString("role").equals(role)) line = lines.getJSONObject(i);
+        String text = line != null ? sayOf(p, line) : "你好，很高興認識你。";
+        String ins = line != null ? instructOf(p, line) : p.optString("instruct");
+        if (eng.optBoolean("clean", true)) ins = ins.isEmpty() ? CLEAN_INSTRUCT : ins + "；" + CLEAN_INSTRUCT;
+        File raw = new File(new File(dir(id), "audition"), role + "_" + speaker + "_" + md5(text + ins) + ".wav");
+        float[] a;
+        if (raw.exists()) a = readWav(raw);
+        else {
+            long seed = eng.optLong("seed", -1);
+            a = engine.synth(text, eng.optString("language", "chinese"), speaker, ins, seed >= 0 ? seed : roleSeed(roleOf(p, role)),
+                (float) eng.optDouble("temperature", 0.8), (float) eng.optDouble("topP", 0));
+            a = Dsp.tidy(Dsp.cleanSpeech(a, SR, maxPause(text)), SR);
+            writeWav(raw, a);
+        }
+        File f = new File(dir(id), "preview.wav");
+        JSONObject q = post == null ? new JSONObject() : post;
+        writeWav(f, applyPost(a, q, 0));
+        return f;
     }
 
     /** Preview the post settings on one line without saving. Returns the preview file. */
