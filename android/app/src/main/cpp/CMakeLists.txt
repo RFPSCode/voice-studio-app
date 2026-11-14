@@ -52,6 +52,9 @@ else()
     set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
 endif()
 add_subdirectory("${QWEN_DIR}/ggml" ggml)
+if(VS_VULKAN AND TARGET ggml-vulkan)
+    target_include_directories(ggml-vulkan SYSTEM PRIVATE "${VS_THIRD_PARTY}/SPIRV-Headers/include" "${VS_THIRD_PARTY}/Vulkan-Headers/include")
+endif()
 
 # ---- qwen core (same three files as upstream qwen-core) ----
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/gen/version.h" "#pragma once\n#define QWEN_VERSION \"voicestudio\"\n")
