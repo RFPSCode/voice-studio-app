@@ -33,7 +33,10 @@ public class Store {
     public static final int SR = 24000;
     public static final String[] SPEAKERS = {"vivian", "serena", "uncle_fu", "dylan", "eric", "ryan", "aiden", "ono_anna", "sohee"};
     /** decoder delay of the shine MP3 stream (measured), added to every start time */
-    public static final double MP3_DELAY = 1057.0 / SR;
+    /** MP3 sample rate of the export (MPEG-1 layer III). */
+    public static final int MP3_RATE = 32000;
+    /** Decoder delay of the exported MP3 (shine, MPEG-1, measured in Chrome and ffmpeg): map times include it. */
+    public static final double MP3_DELAY = 1074.0 / MP3_RATE;
 
     public interface Synth {
         /** returns mono float PCM at 24 kHz or throws */
@@ -771,14 +774,15 @@ public class Store {
         if (total == 0) throw new IllegalStateException("還沒有任何錄好的句子");
         int n = (int) Math.round(lead * SR);
         for (float[] a : parts) n += a.length + (int) Math.round(gap * SR);
-        short[] pcm = new short[n];
+        float[] all = new float[n];
         int o = (int) Math.round(lead * SR);
         for (float[] a : parts) {
-            short[] s16 = Dsp.toPcm16(a);
-            System.arraycopy(s16, 0, pcm, o, s16.length);
-            o += s16.length + (int) Math.round(gap * SR);
+            System.arraycopy(a, 0, all, o, a.length);
+            o += a.length + (int) Math.round(gap * SR);
         }
-        byte[] m = mp3.encode(pcm, SR, kbps);
+        // MPEG-1 (32 kHz): the MPEG-2 (24 kHz) streams of this encoder stop decoding after ~0.6 s in Chrome
+        short[] pcm = Dsp.toPcm16(Voice.resample(all, (double) SR / MP3_RATE));
+        byte[] m = mp3.encode(pcm, MP3_RATE, kbps);
         if (m == null || m.length == 0) throw new IllegalStateException("MP3 編碼失敗");
         String b64 = java.util.Base64.getEncoder().encodeToString(m);
         File ex = new File(dir(id), "export");
